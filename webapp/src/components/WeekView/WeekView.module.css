@@ -1,0 +1,151 @@
+.wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.headerRow {
+  display: grid;
+  grid-template-columns: 48px repeat(7, 1fr);
+  border-bottom: 2px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.timeGutter {
+  width: 48px;
+  flex-shrink: 0;
+}
+
+.dayHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-2) 0;
+  gap: 2px;
+}
+
+.weekdayLabel {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  letter-spacing: 0.05em;
+}
+
+.dayNumber {
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  color: var(--color-text);
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+}
+
+.dayNumberToday {
+  background-color: var(--color-primary);
+  color: #fff;
+}
+
+.dayHeaderToday .weekdayLabel {
+  color: var(--color-primary);
+}
+
+.scrollArea {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.body {
+  display: grid;
+  grid-template-columns: 48px repeat(7, 1fr);
+  /* 24 hours × 60px */
+  height: 1440px;
+  position: relative;
+}
+
+.hourLabel {
+  height: 60px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding-right: var(--space-2);
+  padding-top: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  box-sizing: border-box;
+}
+
+.dayColumn {
+  position: relative;
+  border-left: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.dayColumn:hover {
+  background-color: var(--color-primary-subtle);
+}
+
+.hourLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: var(--color-border);
+}
+
+.currentTime {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: var(--color-accent);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.currentTime::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--color-accent);
+}
+
+.eventBlock {
+  position: absolute;
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  overflow: hidden;
+  cursor: default;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.eventBlock:hover {
+  opacity: 0.85;
+}
+
+.eventTitle {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.eventTime {
+  font-size: var(--font-size-xs);
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+}

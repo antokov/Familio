@@ -1,0 +1,45 @@
+# ── Python / Backend ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+venv/
+htmlcov/
+.coverage
+coverage.xml
+
+# SQLite dev database
+backend/kovacevic.db
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+
+# ── Node / WebApp ─────────────────────────────────────────────────────────────
+node_modules/
+webapp/dist/
+webapp/.vite/
+
+# ── Android ───────────────────────────────────────────────────────────────────
+android/.gradle/
+android/app/build/
+android/local.properties
+
+# ── Secrets / Environment ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+!.env.example
+docker/secrets/
+*.pem
+*.key
+
+# ── OS / IDE ──────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# ── Claude Code (local-only) ───────────────────────────────────────────────────
+.claude/settings.local.json

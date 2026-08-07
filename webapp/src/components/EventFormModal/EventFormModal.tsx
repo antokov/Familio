@@ -1,0 +1,203 @@
+import { useState, useEffect, useRef } from 'react'
+import { X } from 'lucide-react'
+import { AvatarBadge } from '../AvatarBadge/AvatarBadge'
+import type { CalendarEvent, CreateEventInput, Attendee } from '../../types/event'
+import type { FamilyMember } from '../../types/family'
+import styles from './EventFormModal.module.css'
+
+interface EventFormModalProps {
+  editEvent?: CalendarEvent
+  familyMembers: FamilyMember[]
+  initialDate?: string
+  initialTime?: string
+  onSave: (input: CreateEventInput) => Promise<boolean>
+  onClose: () => void
+}
+
+function extractDate(isoStr: string): string {
+  const d = new Date(isoStr)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function extractTime(isoStr: string): string {
+  const d = new Date(isoStr)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+export function EventFormModal({ editEvent, familyMembers, initialDate, initialTime, onSave, onClose }: EventFormModalProps) {
+  const today = new Date().toISOString().slice(0, 10)
+  const isEdit = !!editEvent
+
+  const [title, setTitle] = useState(editEvent?.title ?? '')
+  const [date, setDate] = useState(
+    editEvent ? extractDate(editEvent.startDt) : (initialDate ?? today)
+  )
+  const [startTime, setStartTime] = useState(
+    editEvent ? extractTime(editEvent.startDt) : (initialTime ?? '09:00')
+  )
+  const [endTime, setEndTime] = useState(() => {
+    if (editEvent) return extractTime(editEvent.endDt)
+    const [h, m] = (initialTime ?? '09:00').split(':').map(Number)
+    return h + 1 < 24 ? `${String(h + 1).padStart(2, '0')}:${String(m).padStart(2, '0')}` : '23:59'
+  })
+  const [description, setDescription] = useState(editEvent?.description ?? '')
+  const [attendees, setAttendees] = useState<Attendee[]>(editEvent?.attendees ?? [])
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState(false)
+
+  const titleRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { titleRef.current?.focus() }, [])
+
+  function toggleAttendee(initials: string, color: string) {
+    setAttendees(prev =>
+      prev.some(a => a.initials === initials)
+        ? prev.filter(a => a.initials !== initials)
+        : [...prev, { initials, color }]
+    )
+  }
+
+  function isTimeValid(): boolean {
+    return startTime < endTime
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const trimmed = title.trim()
+    if (!trimmed || !isTimeValid()) return
+
+    setSaving(true)
+    setSaveError(false)
+    const ok = await onSave({
+      title: trimmed,
+      description: description.trim() || undefined,
+      startDt: `${date}T${startTime}:00`,
+      endDt: `${date}T${endTime}:00`,
+      attendees,
+    })
+    setSaving(false)
+    if (ok) {
+      onClose()
+    } else {
+      setSaveError(true)
+    }
+  }
+
+  function handleBackdropClick(e: React.MouseEvent) {
+    if (e.target === e.currentTarget) onClose()
+  }
+
+  const isValid = title.trim().length > 0 && isTimeValid()
+  const modalLabel = isEdit ? 'Termin bearbeiten' : 'Neuer Termin'
+
+  return (
+    <div className={styles.backdrop} onClick={handleBackdropClick}>
+      <div className={styles.modal} role="dialog" aria-modal="true" aria-label={modalLabel}>
+        <div className={styles.header}>
+          <h2 className={styles.modalTitle}>{modalLabel}</h2>
+          <button className={styles.closeBtn} onClick={onClose} aria-label="Schließen">
+            <X size={18} />
+          </button>
+        </div>
+
+        <form className={styles.form} onSubmit={handleSubmit}>
+          <div className={styles.field}>
+            <label htmlFor="event-title" className={styles.label}>Titel *</label>
+            <input
+              id="event-title"
+              ref={titleRef}
+              type="text"
+              className={styles.input}
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="Was findet statt?"
+              maxLength={100}
+              required
+            />
+          </div>
+
+          <div className={styles.field}>
+            <label htmlFor="event-date" className={styles.label}>Datum</label>
+            <input
+              id="event-date"
+              type="date"
+              className={styles.input}
+              value={date}
+              onChange={e => setDate(e.target.value)}
+            />
+          </div>
+
+          <div className={`${styles.field} ${styles.timeRow}`}>
+            <div>
+              <label htmlFor="event-start" className={styles.label}>Von</label>
+              <input
+                id="event-start"
+                type="time"
+                className={styles.input}
+                value={startTime}
+                onChange={e => setStartTime(e.target.value)}
+              />
+            </div>
+            <div>
+              <label htmlFor="event-end" className={styles.label}>Bis</label>
+              <input
+                id="event-end"
+                type="time"
+                className={`${styles.input} ${!isTimeValid() ? styles.inputError : ''}`}
+                value={endTime}
+                onChange={e => setEndTime(e.target.value)}
+              />
+              {!isTimeValid() && (
+                <span className={styles.timeErrorMsg}>Endzeit muss nach Startzeit liegen</span>
+              )}
+            </div>
+          </div>
+
+          <div className={styles.field}>
+            <span className={styles.label}>Teilnehmer</span>
+            <div className={styles.attendeePicker}>
+              {familyMembers.map(m => (
+                <button
+                  key={m.initials}
+                  type="button"
+                  className={`${styles.attendeeBtn} ${attendees.some(a => a.initials === m.initials) ? styles.attendeeSelected : ''}`}
+                  onClick={() => toggleAttendee(m.initials, m.color)}
+                  aria-label={m.name}
+                  aria-pressed={attendees.some(a => a.initials === m.initials)}
+                  title={m.name}
+                >
+                  <AvatarBadge initials={m.initials} color={m.color} size="md" />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.field}>
+            <label htmlFor="event-desc" className={styles.label}>Beschreibung</label>
+            <textarea
+              id="event-desc"
+              className={styles.textarea}
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Optionale Notiz…"
+              maxLength={500}
+              rows={3}
+            />
+          </div>
+
+          {saveError && (
+            <p className={styles.saveError}>Speichern fehlgeschlagen. Bitte erneut versuchen.</p>
+          )}
+
+          <div className={styles.actions}>
+            <button type="button" className={styles.cancelBtn} onClick={onClose}>
+              Abbrechen
+            </button>
+            <button type="submit" className={styles.saveBtn} disabled={!isValid || saving}>
+              {saving ? 'Speichert…' : isEdit ? 'Speichern' : 'Erstellen'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}

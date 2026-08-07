@@ -1,0 +1,164 @@
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  transition: background-color 0.15s ease;
+  list-style: none;
+}
+
+.item:hover {
+  background-color: var(--color-surface-alt);
+}
+
+.item:hover .actions {
+  opacity: 1;
+}
+
+.checked {
+  opacity: 0.65;
+}
+
+/* Circular checkbox */
+.checkbox {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  background-color: var(--color-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background-color 0.18s ease, border-color 0.18s ease;
+  cursor: pointer;
+}
+
+.checkbox:hover {
+  border-color: var(--color-success);
+}
+
+.checkboxChecked {
+  background-color: var(--color-success);
+  border-color: var(--color-success);
+}
+
+/* Content */
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.name {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.checked .name {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
+.meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.quantity {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.storeBadge {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+/* Actions (visible on hover) */
+.actions {
+  display: flex;
+  gap: var(--space-1);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  flex-shrink: 0;
+}
+
+.actionBtn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.actionBtn:hover {
+  background-color: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.deleteBtn:hover {
+  background-color: rgba(212, 98, 58, 0.12);
+  color: var(--color-accent);
+}
+
+/* Delete confirm inline */
+.confirmRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.confirmText {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.confirmBtn {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent);
+  color: #fff;
+  transition: opacity 0.15s ease;
+}
+
+.confirmBtn:hover {
+  opacity: 0.85;
+}
+
+.cancelBtn {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface-alt);
+  color: var(--color-text-muted);
+  transition: background-color 0.15s ease;
+}
+
+.cancelBtn:hover {
+  background-color: var(--color-border);
+}

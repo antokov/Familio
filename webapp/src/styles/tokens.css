@@ -1,0 +1,79 @@
+/* Design tokens — Light mode (default) */
+:root {
+  /* Surfaces */
+  --color-bg:           #F5F3EF;
+  --color-surface:      #FDFCFA;
+  --color-surface-alt:  #EAE8E2;
+
+  /* Brand */
+  --color-primary:      #2E6B4A;
+  --color-primary-subtle: rgba(46, 107, 74, 0.10);
+  --color-accent:       #D4623A;
+
+  /* Semantic */
+  --color-success:      #4A9E72;
+  --color-warning:      #C8962A;
+
+  /* Text */
+  --color-text:         #1C1916;
+  --color-text-muted:   #716C67;
+
+  /* Border */
+  --color-border:       #DDD9D3;
+
+  /* Shadow */
+  --shadow-card:        0 2px 16px rgba(28, 25, 22, 0.07);
+  --shadow-drawer:      4px 0 24px rgba(28, 25, 22, 0.12);
+
+  /* Spacing */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+
+  /* Layout */
+  --sidebar-width: 240px;
+  --topbar-height: 60px;
+  --quickadd-bar-height: 64px;
+
+  /* Radius */
+  --radius-sm:  8px;
+  --radius-md:  12px;
+  --radius-lg:  16px;
+  --radius-full: 9999px;
+
+  /* Typography */
+  --font-family: 'Nunito', system-ui, -apple-system, sans-serif;
+  --font-size-xs:  11px;
+  --font-size-sm:  13px;
+  --font-size-md:  15px;
+  --font-size-lg:  20px;
+  --font-size-xl:  28px;
+  --font-size-2xl: 36px;
+}
+
+/* Dark mode overrides */
+[data-theme="dark"] {
+  --color-bg:           #111009;
+  --color-surface:      #1B1915;
+  --color-surface-alt:  #242019;
+
+  --color-primary:      #5BAF7E;
+  --color-primary-subtle: rgba(91, 175, 126, 0.12);
+  --color-accent:       #E07A54;
+
+  --color-success:      #60B888;
+  --color-warning:      #D4A840;
+
+  --color-text:         #EDE8E3;
+  --color-text-muted:   #7A736C;
+
+  --color-border:       #2E2B27;
+
+  --shadow-card:        0 2px 16px rgba(0, 0, 0, 0.40);
+  --shadow-drawer:      4px 0 24px rgba(0, 0, 0, 0.50);
+}
