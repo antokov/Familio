@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.models.document import Document
 from app.models.family_member import FamilyMember
 from app.schemas.family_member import FamilyMemberCreate, FamilyMemberResponse, FamilyMemberUpdate
 
@@ -63,5 +64,8 @@ async def delete_family_member(member_id: str, db: AsyncSession = Depends(get_db
     member = await db.get(FamilyMember, member_id)
     if member is None:
         raise HTTPException(status_code=404, detail="Family member not found")
+    await db.execute(
+        update(Document).where(Document.family_member_id == member_id).values(family_member_id=None)
+    )
     await db.delete(member)
     await db.commit()

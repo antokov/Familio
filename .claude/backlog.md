@@ -8,6 +8,8 @@
 - [ ] TD-08: `useShoppingListApi` hat keine Hook-Tests (fetch-Mock via vi.fn) — gehört zum Scope von FS-20 (useTasksApi Hook-Tests)
 - [ ] TD-06: FamilyMemberFormModal hat keine eigenen Unit-Tests (Eingabe, Farb-Swatch, Submit, Inline-Error) — introduced in: FS-22, file: `webapp/src/components/FamilyMemberFormModal/`
 - [ ] TD-07: BA/Architect-Checklist ergänzen: Grep nach allen Imports von zu löschenden Konstanten vor arch-decision.md (EventFormModal-Consumer-Discovery-Lücke in FS-22)
+- [ ] TD-12: `useDocuments` hat keine Hook-Tests — konsistent mit TD-08/FS-17/FS-20 (introduced in: Dokumente, file: `webapp/src/hooks/useDocuments.ts`)
+- [ ] TD-13: `DocumentsPage` + `DocumentUploadModal` haben keine Render-Tests — konsistent mit TD-06 (introduced in: Dokumente, files: `webapp/src/pages/DocumentsPage.tsx`, `webapp/src/components/DocumentUploadModal/`)
 
 ## 🟡 Follow-up Stories
 <!-- Items deferred by Dev or identified by Tester -->
@@ -25,6 +27,9 @@
 - [ ] FS-19: DashboardPage API-Fetches testen (vi.fn fetch-Mock) — jetzt 3 Fetches: tasks, events, shopping
 - [ ] FS-24: ShoppingItem + ShoppingFormModal Render-Tests (Checkbox-Toggle, Badge, Inline-Delete-Confirm, Form-Submit) (deferred from Einkaufsliste v1)
 - [ ] FS-26: AvatarBadge.test.tsx reparieren — CSS Module Klassen-Hashing (`_lg_60b07b` statt `lg`) — Vitest-Config oder `cssModules: { localsConvention: 'camelCase' }` prüfen (pre-existing failure, surfaced in Einkaufsliste v1 test run) — **BEHOBEN als Nebeneffekt von FS-22 via `classNameStrategy: 'non-scoped'` in vite.config.ts**
+- [ ] FS-27: **Deployment:** Persistentes Coolify-Volume auf `/app/uploads` (Backend-Ressource) einrichten, analog zum Postgres-Volume — ohne das gehen hochgeladene Dokumente bei jedem Redeploy verloren (introduced in: Dokumente)
+- [ ] FS-28: Explizite Backend-Tests für leeren/fehlenden `file`-Multipart-Feld-Request bei `POST /api/documents` (aktuell nur implizit durch FastAPI-Validierung abgedeckt, nicht separat verifiziert) (introduced in: Dokumente)
+- [ ] FS-29: `DocumentPreviewModal` zeigt bei fehlender Datei auf der Platte (404 vom `/view`-Endpoint) aktuell ein kaputtes `<iframe>`/`<img>` statt einer Fehlermeldung — `onError`-Handler ergänzen, der auf den Fallback-Zustand umschaltet (introduced in: Dokumenten-Vorschau in der App)
 
 ## 🟢 Feature Ideas
 <!-- Ideas that came up during implementation but are out of scope -->
@@ -65,6 +70,9 @@
 - [Bugfix tasks 500]: Root Cause: `completed_at`-Spalte fehlte in persistierter SQLite-DB (create_all idempotent auf Tabellen-Ebene); Fix: DB-Datei gelöscht → create_all neu; kein Code-Change nötig; Folgerisiko: jede neue Modell-Spalte → 500 bis DB manuell gelöscht → FS-09 (Alembic) priorisieren
 - [Auto-Cleanup erledigte Einträge]: Lazy Deletion auf GET (kein Scheduler); Bulk-DELETE vor SELECT; Guard completed_at IS NOT NULL schützt Altdaten; completed_at server-controlled via PUT
 - [FS-22 Familienmitglieder-CRUD]: Vollständige Full-Stack-Migration: neues `family_members`-Modell/Schema/Router im Backend (16 Tests); `useFamilyMembers`-Hook + `FamilyMemberFormModal` (10-Farb-Swatches) im Frontend; alle 4 Consumer von FAMILY_MEMBERS migriert (SettingsPage, TaskFormModal, EventFormModal, Sidebar); `constants/family.ts` gelöscht; Sidebar-Fetch nach AppShell verschoben (Prop-passing statt direkter Hook-Aufruf); `classNameStrategy: 'non-scoped'` in vite.config.ts behebt CSS-Module-Hash-Problem (FS-26 Nebeneffekt)
+- [Dokumente]: Neues `documents`-Modell/Schema/Router im Backend (15 Tests) — echter FK `family_member_id` (nullable, Unassign in Anwendungscode statt DB-Cascade, da SQLite/Postgres inkonsistent) statt denormalisierter Initialen/Farbe wie bei Task; lokales Dateisystem-Storage unter `settings.upload_dir` mit UUID-`stored_filename` (Path-Traversal-Schutz, kollisionsfrei), Allowlist erlaubter Dateitypen + 20-MB-Limit; `python-multipart` als neue Dependency. Frontend: `useDocuments`-Hook analog `useFamilyMembers`; `DocumentItem` mit eckigem Icon-Badge als Signature-Element (Abgrenzung zur runden Task-Checkbox), Inline-`<select>` für Reassignment direkt in der Liste (kein Re-Upload nötig); `DocumentUploadModal` nach bestehendem FormModal-Pattern.
+- [Dokumente-Ansehen]: `/api/documents/{id}/view`-Endpoint ergänzt (Refactor: `_get_document_file()`-Helper geteilt zwischen `/download` und `/view`) — identisch zu `/download`, aber `content_disposition_type="inline"` statt `"attachment"`, damit Browser PDFs/Bilder direkt rendern statt zu downloaden (6 neue Tests).
+- [Dokumenten-Vorschau in der App]: Reine Frontend-Story — `DocumentPreviewModal` (90vw×90vh, `--color-bg`-Hintergrund als Signature-Element) ersetzt den bisherigen `target="_blank"`-Ansehen-Link; Typ-Erkennung über `doc.contentType` (nicht Dateiendung): PDF → `<iframe>`, Bild (außer HEIC/HEIF, da Browser-Rendering-Limitation) → `<img>`, sonst Fallback mit Download-Button; `previewDoc`-State in `DocumentsPage` analog `editingTask`-Pattern aus `TasksPage`; Escape-Taste zum Schließen ergänzt (State-of-the-art-Modal-Pattern-Erweiterung, bisher nur Backdrop-Klick/X-Button).
 
 ## ✅ Done
 <!-- Resolved items -->

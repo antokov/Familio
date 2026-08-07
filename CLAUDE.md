@@ -72,6 +72,7 @@ kovacevicapp/
 1. **Familienkalender** — gemeinsame Termine, Wiederholungen, Erinnerungen
 2. **Aufgaben** — persönliche & gemeinsame To-Dos mit Zuweisung an Familienmitglieder
 3. **Einkaufslisten** — mehrere Listen, Kategorien, Live-Sync zwischen Geräten
+4. **Dokumente** — Datei-Upload (PDF/Office/Bilder, max. 20 MB) mit Zuweisung an ein Familienmitglied, Download, Löschen
 
 ---
 
@@ -103,6 +104,7 @@ kovacevicapp/
 | `webapp/src/api/` | Typsicherer API-Client |
 | `webapp/src/pages/ShoppingPage.tsx` | Einkaufsliste — inkl. QuickAddBar (Schnellerfassung) |
 | `webapp/src/components/QuickAddBar/QuickAddBar.tsx` | Fixe Eingabeleiste am Seitenende (Tab-Nav, Enter-Submit) |
+| `backend/app/routers/documents.py` | Dokumenten-Upload/-Download (multipart), lokales Dateisystem-Storage unter `settings.upload_dir` |
 | `docker/docker-compose.yml` | NAS-Deployment |
 
 ---
@@ -116,6 +118,8 @@ kovacevicapp/
 | `ALLOWED_ORIGINS` | CORS-Whitelist (WebApp-URL) | Yes |
 | `POSTGRES_USER` | DB-User (Docker) | Yes |
 | `POSTGRES_PASSWORD` | DB-Passwort (Docker) | Yes |
+| `UPLOAD_DIR` | Verzeichnis für Dokumenten-Uploads (Default `./uploads`) | No |
+| `MAX_UPLOAD_SIZE_MB` | Max. Upload-Dateigröße in MB (Default `20`) | No |
 
 ---
 
@@ -139,4 +143,4 @@ kovacevicapp/
 
 ## Current State
 
-Dashboard zeigt ausschließlich echte DB-Daten (Kalender, Aufgaben, Einkauf — kein Mock mehr). Einkaufsliste mit Backend-API, `useShoppingListApi`-Hook und `QuickAddBar` (fixiert am Viewport-Rand). Kalender (MonthView + WeekView), Aufgaben (CRUD + Recurrence), Familienmitglieder (CRUD) und Settings-Seite aktiv. **Auto-Cleanup aktiv:** Erledigte Aufgaben und gecheckte Einkaufseinträge werden nach 6h beim nächsten GET gelöscht (Lazy Deletion, kein Scheduler). Guard: nur Einträge mit gesetztem `completed_at`/`checked_at` werden gelöscht — Altdaten bleiben. Backend: SQLite (Dev) / PostgreSQL (Prod). Nächster Schritt: E2E-Tests oder Android-App.
+Dashboard zeigt ausschließlich echte DB-Daten (Kalender, Aufgaben, Einkauf — kein Mock mehr). Einkaufsliste mit Backend-API, `useShoppingListApi`-Hook und `QuickAddBar` (fixiert am Viewport-Rand). Kalender (MonthView + WeekView), Aufgaben (CRUD + Recurrence), Familienmitglieder (CRUD), Dokumente (Upload/Download/Zuweisung/Löschen, In-App-Vorschau für PDF/Bilder via `DocumentPreviewModal`, lokales Dateisystem-Storage) und Settings-Seite aktiv. **Auto-Cleanup aktiv:** Erledigte Aufgaben und gecheckte Einkaufseinträge werden nach 6h beim nächsten GET gelöscht (Lazy Deletion, kein Scheduler). Guard: nur Einträge mit gesetztem `completed_at`/`checked_at` werden gelöscht — Altdaten bleiben. Backend: SQLite (Dev) / PostgreSQL (Prod). **Deployment-Hinweis:** Coolify-Backend braucht ein persistentes Volume auf `/app/uploads`, sonst gehen Dokumente bei jedem Redeploy verloren (siehe Backlog FS-27). Nächster Schritt: E2E-Tests oder Android-App.

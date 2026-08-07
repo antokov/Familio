@@ -6,6 +6,7 @@ const DashboardPage  = lazy(() => import('./pages/DashboardPage'))
 const CalendarPage   = lazy(() => import('./pages/CalendarPage'))
 const TasksPage      = lazy(() => import('./pages/TasksPage'))
 const ShoppingPage   = lazy(() => import('./pages/ShoppingPage'))
+const DocumentsPage  = lazy(() => import('./pages/DocumentsPage'))
 const SettingsPage   = lazy(() => import('./pages/SettingsPage'))
 
 export function App() {
@@ -17,6 +18,7 @@ export function App() {
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="tasks"    element={<TasksPage />} />
           <Route path="shopping"  element={<ShoppingPage />} />
+          <Route path="documents" element={<DocumentsPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*"        element={<Navigate to="/" replace />} />
         </Route>

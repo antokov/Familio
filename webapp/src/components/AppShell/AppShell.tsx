@@ -16,6 +16,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/calendar':  'Kalender',
   '/tasks':     'Aufgaben',
   '/shopping':  'Einkauf',
+  '/documents': 'Dokumente',
   '/settings':  'Einstellungen',
 }
 

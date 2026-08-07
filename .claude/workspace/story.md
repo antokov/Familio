@@ -1,32 +1,34 @@
-# User Story — TD-11: QuickAddBar-Höhe als CSS-Variable
+# User Story — Dokumenten-Vorschau in der App
 
-## Story
-Als Entwickler möchte ich, dass der Abstand unter der Einkaufsliste automatisch zur Höhe der QuickAddBar passt, damit bei einer Änderung der Bar-Höhe kein manuelles Update an mehreren Stellen nötig ist.
+**As a** Familienmitglied
+**I want** ein Dokument direkt in der App ansehen können, ohne dass sich ein neuer Browser-Tab öffnet
+**So that** ich schnell reinschauen kann (z. B. "welches Dokument ist das nochmal?"), ohne die App zu verlassen oder Tabs aufzuräumen
 
 ## Acceptance Criteria
 
-**AC1 – Keine hartcodierten Pixel**
-Given die ShoppingPage hat eine fixe QuickAddBar am unteren Rand,
-When ich die Bar-Höhe ändern möchte,
-Then muss ich den Wert nur an einer einzigen Stelle anpassen.
+1. **Given** ich bin auf der Dokumente-Seite
+   **When** ich bei einem Dokument auf "Ansehen" klicke
+   **Then** öffnet sich eine Vorschau **innerhalb der App** (Modal/Overlay) — es öffnet sich **kein** neuer Browser-Tab
 
-**AC2 – Visuell identisches Ergebnis**
-Given die ShoppingPage mit Einträgen,
-When die Seite geladen wird,
-Then ist der Inhalt weiterhin vollständig sichtbar und wird nicht von der QuickAddBar verdeckt.
+2. **Given** das Dokument ist ein Bild (jpg/jpeg/png/gif/heic) oder PDF
+   **When** die Vorschau öffnet
+   **Then** wird der Inhalt direkt sichtbar dargestellt (Bild bzw. gerendertes PDF)
 
-**AC3 – CSS-Variable als Single Source of Truth**
-Given die QuickAddBar-Höhe ist als CSS-Variable definiert,
-When `.page` den `padding-bottom` setzt,
-Then verwendet es `var(--quickadd-bar-height)` statt eines fixen Pixelwerts.
+3. **Given** das Dokument ist ein Dateityp, der sich nicht sinnvoll im Browser darstellen lässt (z. B. .docx, .xlsx, .zip)
+   **When** die Vorschau öffnet
+   **Then** wird ein Hinweis "Vorschau für diesen Dateityp nicht verfügbar" angezeigt, mit einem Download-Button als Alternative — kein leeres/kaputtes Preview-Fenster
 
-**AC4 – Mobile funktioniert weiterhin**
-Given die App auf einem Mobilgerät (<768px),
-When die QuickAddBar links auf 0 springt,
-Then bleibt `padding-bottom` weiterhin korrekt (keine Regression).
+4. **Given** die Vorschau ist offen
+   **When** ich auf Schließen (X-Button, Klick außerhalb, oder Escape) klicke
+   **Then** schließt sich die Vorschau und ich bin wieder auf der Dokumente-Liste
+
+5. **Given** die Vorschau ist offen
+   **When** ich stattdessen die Datei herunterladen will
+   **Then** gibt es einen Download-Button auch innerhalb der Vorschau
 
 ## Out of Scope
-- Dynamische Höhenmessung per JS/ResizeObserver
-- Änderungen an anderen Seiten (nur ShoppingPage betroffen)
-- Redesign der QuickAddBar
-- Änderungen an der Bar-Höhe selbst
+
+- Zoom/Pan-Steuerung für Bilder oder PDFs (Browser-native PDF-Controls reichen)
+- Mehrseitige PDF-Navigation über eigene UI (Browser-natives PDF-Rendering übernimmt das)
+- Vorschau-Generierung für Office-Dokumente (Thumbnails/Konvertierung serverseitig)
+- Ändern des bestehenden Download-Buttons (bleibt wie er ist)

@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Calendar, CheckSquare, ShoppingCart, Settings } from 'lucide-react'
+import { LayoutDashboard, Calendar, CheckSquare, ShoppingCart, FileText, Settings } from 'lucide-react'
 import { AvatarBadge } from '../AvatarBadge/AvatarBadge'
 import { ThemeToggle } from '../ThemeToggle/ThemeToggle'
 import type { FamilyMember } from '../../types/family'
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { path: '/calendar', label: 'Kalender',  icon: Calendar },
   { path: '/tasks',    label: 'Aufgaben',  icon: CheckSquare },
   { path: '/shopping', label: 'Einkauf',   icon: ShoppingCart },
+  { path: '/documents', label: 'Dokumente', icon: FileText },
 ]
 
 interface SidebarProps {

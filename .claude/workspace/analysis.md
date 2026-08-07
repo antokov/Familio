@@ -1,39 +1,26 @@
-# BA Analysis — TD-11: QuickAddBar-Höhe als CSS-Variable
-
-## Root Cause
-
-`ShoppingPage.module.css` hat `padding-bottom: 64px` hartcodiert. Dieser Wert kommt von:
-- `padding-top der Bar`: `var(--space-3)` = 12px
-- Input-Höhe: 38px (fix in QuickAddBar.module.css)
-- `padding-bottom der Bar`: `var(--space-3)` = 12px
-- `border-top`: 1px
-- **Total: 63px** (auf 64px aufgerundet)
-
-Wenn padding oder input-Höhe in QuickAddBar.module.css geändert wird, muss ShoppingPage.module.css manuell mitgepflegt werden.
+# BA Analysis — Dokumenten-Vorschau in der App
 
 ## Business Rules
 
-1. **BR-1:** Der `padding-bottom`-Wert muss via CSS-Variable ausgedrückt werden — kein Pixelwert direkt in ShoppingPage.module.css.
-2. **BR-2:** Die Variable muss an exakt einer Stelle definiert sein (Single Source of Truth).
-3. **BR-3:** Kein JavaScript/ResizeObserver — reine CSS-Lösung.
-4. **BR-4:** Das visuelle Ergebnis bleibt identisch (kein Pixel-Rückschritt).
+1. Vorschaufähige Typen sind auf Browser-nativ darstellbare Formate beschränkt: PDF (via `<iframe>`/`<embed>`, Browser-natives PDF-Rendering) und Bilder (`jpg`, `jpeg`, `png`, `gif`, `heic` via `<img>`).
+2. Alle anderen erlaubten Upload-Typen (`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`, `txt`, `zip`) zeigen einen Fallback-Hinweis statt eines Vorschauversuchs — kein Rendering-Versuch, der scheitern könnte.
+3. Die Vorschau nutzt den bereits bestehenden `/api/documents/{id}/view`-Endpoint (inline `Content-Disposition`) — kein neuer Backend-Endpoint nötig.
+4. Der bisherige "Ansehen"-Button (öffnet neuen Tab) wird durch das In-App-Modal **ersetzt**, nicht ergänzt — der Story-Auftrag ist explizit "kein neuer Tab".
 
 ## Edge Cases
 
-1. **Bar-Höhe ändert sich:** Entwickler ändert nur die Variable, beide Stellen ziehen mit.
-2. **Mobile (<768px):** `left: 0` in QuickAddBar — padding-bottom bleibt unverändert korrekt, kein Media-Query-Override nötig.
-3. **Kein QuickAddBar-Consumer außer ShoppingPage:** Variable wird nur in ShoppingPage.module.css referenziert.
+1. **HEIC-Bilder:** Werden von den meisten Desktop-Browsern (Chrome/Firefox) NICHT nativ im `<img>`-Tag gerendert (fehlende Codec-Unterstützung) — obwohl HEIC in der Upload-Allowlist ist. Muss wie ein nicht-vorschaufähiger Typ behandelt werden (Fallback-Hinweis), sonst zeigt der Browser ein kaputtes Bild-Icon.
+2. **PDF-Rendering schlägt fehl** (z. B. sehr alter Browser ohne PDF-Viewer-Plugin): Kein expliziter Error-Handler nötig für diesen Nischenfall — Browser zeigen in aller Regel einen eigenen "Download statt Anzeige"-Hinweis im iframe selbst. Kein Blocker.
+3. **Sehr große Bilder/PDFs (nah am 20-MB-Limit):** Modal muss scrollbar sein, darf Viewport nicht sprengen — reines CSS-Constraint (`max-height`, `overflow`), kein funktionaler Edge Case.
+4. **Datei auf Platte fehlt** (analog zum bestehenden Download-Fall): `/view`-Endpoint liefert bereits 404 — Frontend zeigt im Preview-Bereich einen Fehlertext statt eines kaputten iframe/img.
+5. **Klick auf "Ansehen" bei bereits offenem Modal für ein anderes Dokument:** Modal-State ist an das ausgewählte Dokument gebunden (analog zu `editingTask`-Pattern in `TasksPage`) — zweiter Klick ersetzt einfach den Inhalt, kein Stacking mehrerer Modals.
 
-## Data Model
+## Data Model Implications
 
-Keine DB-Änderungen. Reine CSS-Refaktorierung.
-
-## Pattern-Analyse
-
-`tokens.css` hat bereits `--topbar-height: 60px` und `--sidebar-width: 240px` im Layout-Abschnitt.
-→ `--quickadd-bar-height: 64px` folgt exakt diesem Muster.
+Keine. Reine Frontend-Änderung — nutzt bestehende `viewUrl()`-Funktion aus `useDocuments.ts` und das bestehende `contentType`-Feld aus `Document` (zur Entscheidung PDF vs. Bild vs. Fallback).
 
 ## Open Questions
 
-- **NON-BLOCKING:** Soll der Wert dynamisch per CSS-Calc aus Space-Tokens berechnet werden?
-  (`calc(var(--space-3) * 2 + 38px + 1px)` = 63px) → NEIN: Hardcoded 64px in der Variable ist klarer und weniger fragil.
+1. **NON-BLOCKING:** HEIC-Behandlung als "nicht vorschaufähig" statt Rendering-Versuch — pragmatische Entscheidung wegen fehlender Browser-Unterstützung, konsistent mit AC3.
+
+Keine BLOCKING-Fragen — Pipeline läuft ohne Eskalation weiter.
