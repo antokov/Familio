@@ -122,7 +122,9 @@ export function WeekView({ weekStart, events, today, onSlotClick, onEventClick }
 
   function allDayEventsByDay(day: Date): CalendarEvent[] {
     const dateStr = toLocalDateStr(day)
-    return events.filter(ev => ev.startDt.slice(0, 10) === dateStr && ev.allDay)
+    return events.filter(ev =>
+      ev.allDay && dateStr >= ev.startDt.slice(0, 10) && dateStr <= ev.endDt.slice(0, 10)
+    )
   }
 
   const hasAllDayEvents = events.some(ev => ev.allDay)

@@ -1,54 +1,51 @@
-# Implementation Report — Ganztägige Termine
+# Implementation Report — Mehrtägige Termine (Ferien etc.)
 
 ## Approach
 
-Neues `all_day: boolean`-Feld (Default `false`) auf `CalendarEvent` — rein additiv, fließt
-über das bestehende `model_dump()`/`setattr`-Pattern automatisch durch `create_event`/
-`update_event`, **keine Router-Code-Änderung nötig**. `EventFormModal` bekommt eine
-"Ganztägig"-Checkbox: aktiviert blendet sie die Zeit-Row komplett aus dem DOM aus und setzt
-beim Speichern `startDt`/`endDt` hart auf `00:00`/`23:59` desselben Tages. `WeekView` filtert
-All-Day-Termine aus dem stunden-basierten Grid heraus und zeigt sie stattdessen in einer neuen,
-nur bei Bedarf sichtbaren "Ganztägig"-Zeile oberhalb des Stunden-Rasters (mit "+N weitere"-
-Begrenzung analog zu `MonthView`). `MonthView` blieb unverändert, da die Pill-Darstellung dort
-bereits unabhängig von der Uhrzeit funktioniert.
+Reines Frontend-Feature — das Backend unterstützte beliebige Datumsspannen bereits
+unverändert (`end_dt > start_dt` war die einzige Validierung). `EventFormModal` zeigt bei
+aktiviertem "Ganztägig" jetzt eine Von/Bis-Datums-Zeile statt des einzelnen "Datum"-Felds, mit
+Auto-Korrektur ("Bis" zieht nach, wenn "Von" darüber hinausgeschoben wird) und Validierung
+("Bis" muss ≥ "Von" sein). `MonthView` und `WeekView` ordnen ganztägige Termine jetzt jedem Tag
+im Bereich `[start, end]` zu (statt nur dem Starttag) — nicht-ganztägige Termine bleiben
+unverändert bei Einzeltag-Zuordnung.
 
 ## Files Changed
 
-**Backend:**
-- `backend/app/models/event.py` — Spalte `all_day` (`Boolean`, `nullable=False`, `default=False`).
-- `backend/app/schemas/event.py` — `all_day` auf `EventCreate`/`EventUpdate`/`EventResponse`.
-- `backend/app/routers/events.py` — **unverändert** (generisches `model_dump()`-Pattern deckt das neue Feld bereits ab).
+- `webapp/src/components/EventFormModal/EventFormModal.tsx` — neuer `endDate`-State,
+  bedingte Von/Bis-Datums-Zeile bei `allDay`, `isDateRangeValid()`, Auto-Korrektur-Handler
+  (`handleDateChange`, `handleAllDayChange`), `handleSubmit`/`isValid` nutzen jetzt
+  `date`/`endDate` je nach `allDay`.
+- `webapp/src/components/EventFormModal/EventFormModal.module.css` — neue Klasse `.dateRow`
+  (identisches Grid-Layout wie `.timeRow`, als eigener Selektor für spätere Entkopplung).
+- `webapp/src/components/MonthView/MonthView.tsx` — `eventDateKeys()`-Helper (mit
+  `parseLocalDate()` zur Vermeidung des UTC-Parse-Fallstricks bei `new Date("YYYY-MM-DD")|`,
+  konsistent mit dem bereits etablierten TD-05-Pattern) erweitert die Tag-Zuordnung auf den
+  gesamten Datumsbereich bei `allDay`-Events.
+- `webapp/src/components/WeekView/WeekView.tsx` — `allDayEventsByDay()` von exaktem
+  String-Vergleich auf Bereichs-Zugehörigkeit (`dateStr >= start && dateStr <= end`) umgestellt
+  — reiner String-Vergleich auf ISO-Datumsstrings, keine `Date`-Objekt-Arithmetik nötig.
+- `webapp/src/components/EventFormModal/EventFormModal.test.tsx` — zwei bestehende Tests
+  angepasst (siehe `analysis.md` Edge Case 8: Von/Bis existieren bei Ganztägig jetzt als
+  `type="date"` statt komplett zu verschwinden), neuer Testblock "Mehrtägig" (+5 Tests).
+- **NEU:** `webapp/src/components/MonthView/MonthView.test.tsx` — MonthView hatte bisher keine
+  Tests (TD aus FS-16); da diese Story die Kern-Bucketing-Logik ändert, wurden gezielte Tests
+  ergänzt (Regression Eintägig + neue Mehrtägig-Fälle, 5 Tests).
+- `webapp/src/components/WeekView/WeekView.test.tsx` — neuer Testblock "Mehrtägige
+  Ganztägig-Termine" (+2 Tests).
 
-**Frontend:**
-- `webapp/src/types/event.ts` — `allDay: boolean` auf `CalendarEvent`/`CreateEventInput`.
-- `webapp/src/hooks/useEvents.ts` — `toSnakeCase`/`fromApi` um `all_day`↔`allDay` erweitert.
-- `webapp/src/components/EventFormModal/EventFormModal.tsx` (+ `.module.css`) — Checkbox
-  "Ganztägig", bedingtes Ausblenden der Zeit-Row, harte 00:00/23:59-Werte beim Submit,
-  Validierung (`isValid`) übergeht die Zeit-Prüfung bei aktiviertem `allDay`.
-- `webapp/src/components/WeekView/WeekView.tsx` (+ `.module.css`) — neue All-Day-Zeile
-  (`allDayEventsByDay()`, `hasAllDayEvents`), `eventsByDay()` filtert jetzt `!ev.allDay`
-  heraus, sodass `computeEventLayout()` **unverändert** bleibt.
-- `webapp/src/components/ExtractEventsModal/ExtractEventsModal.tsx` — `allDay: false`
-  beim `createEvent()`-Aufruf ergänzt (Pflichtfeld-Kompatibilität; bewusst `false`, siehe
-  Assumptions).
-- `webapp/src/components/EventFormModal/EventFormModal.test.tsx`,
-  `webapp/src/components/WeekView/WeekView.test.tsx` — Test-Fixtures um `allDay: false`
-  ergänzt, damit bestehende Suiten kompilieren.
+**Backend:** keine Änderungen.
 
 ## Assumptions Made
 
-- Extrahierte Termine aus der Dokumenten-Extraktion (`ExtractEventsModal`) werden weiterhin
-  mit `allDay: false` angelegt, auch wenn ihr Zeitraum 00:00–23:59 beträgt — keine automatische
-  Rückwirkung auf bestehende Logik (explizit Out of Scope laut Story).
-- Default-Zeiten beim Deaktivieren von "Ganztägig": die zuvor im State gehaltenen Werte bleiben
-  erhalten (kein Reset auf 09:00–10:00) — der Zeit-State wird beim Toggle nie verändert, nur
-  die Sichtbarkeit der Row. Bei einem neuen Termin ist der Ausgangswert ohnehin 09:00–10:00
-  (bestehender Default), bei einem bestehenden Termin die zuvor gespeicherte Zeit — das
-  entspricht dem in `analysis.md` angenommenen Verhalten, ohne einen zusätzlichen Reset-Effekt
-  einzuführen.
-- Lokale Dev-Datenbank (`backend/kovacevic.db`) wurde **nicht** automatisch gelöscht — das
-  bekannte 500-Risiko aus FS-09 besteht weiterhin für bestehende lokale/Produktions-DBs mit der
-  neuen Spalte, bis sie manuell neu erstellt oder migriert wird (siehe Backlog FS-09).
+- Von-Datum-Verschiebung nach Bis → Bis wird automatisch nachgezogen (nicht blockiert) —
+  konsistent mit der in `analysis.md` festgelegten Annahme, den Nutzer nicht unnötig zu
+  bremsen.
+- Beim Deaktivieren von "Ganztägig" bei einem mehrtägigen Termin geht "Bis" verloren (Termin
+  wird zum eintägigen Zeittermin am "Von"-Datum) — bewusstes, bereits in `analysis.md`
+  dokumentiertes Verhalten (Mehrtägigkeit ist exklusiv an "Ganztägig" gekoppelt).
+- Kein durchgehender visueller Balken über mehrere Tage — Pill-Wiederholung pro Tag (Out of
+  Scope laut Story), konsistent mit den bereits etablierten Pill-Mustern in beiden Views.
 
 ## Deviations from arch-decision.md
 
@@ -56,11 +53,14 @@ Keine. Alle in `arch-decision.md` benannten Dateien wurden wie vorgesehen angefa
 
 ## Technical Debt / Follow-up
 
-- `document_extraction.py` markiert Termine mit Ganztags-Zeitraum weiterhin nicht als
-  `all_day=true` — potenzielle Folge-Story, um beide Features zu verbinden (Extraktion könnte
-  `all_day` direkt setzen, statt nur den Zeitraum zu simulieren).
-- Keine Alembic-Migration für die neue Spalte (bewusst, siehe FS-09).
-- Android-Parität für "Ganztägig" fehlt (Web-only in v1, wie bei vorherigen Features).
+- Kein Test für die Mehrtägigkeit über eine Monats-/Wochengrenze hinweg (z. B. 28.07.–03.08.)
+  — aus Testbarkeits-Gründen ausgelassen (MonthView-Zellen haben keinen stabilen
+  Datums-Selektor über Monatsgrenzen hinweg, nur Tageszahlen, die zwischen Monaten kollidieren
+  können); der zugrundeliegende Algorithmus behandelt Monatsgrenzen nicht als Sonderfall, das
+  Risiko einer Regression dort ist gering, aber unverifiziert.
+- Kein durchgehender visueller Balken (bewusst Out of Scope, siehe Story) — potenzielle
+  spätere Politur-Story.
+- Android-Parität fehlt weiterhin (Web-only, wie bei allen bisherigen Kalender-Features).
 
 ## Open Items
 

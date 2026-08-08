@@ -39,14 +39,35 @@ function eventColor(event: CalendarEvent): string {
   return event.attendees[0]?.color ?? 'var(--color-primary)'
 }
 
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+function eventDateKeys(ev: CalendarEvent): string[] {
+  const startKey = ev.startDt.slice(0, 10)
+  const endKey = ev.endDt.slice(0, 10)
+  if (!ev.allDay || startKey === endKey) return [startKey]
+
+  const keys: string[] = []
+  const cur = parseLocalDate(startKey)
+  const end = parseLocalDate(endKey)
+  while (cur <= end) {
+    keys.push(toLocalDateStr(cur))
+    cur.setDate(cur.getDate() + 1)
+  }
+  return keys
+}
+
 export function MonthView({ year, month, events, today, onDayClick, onEventClick }: MonthViewProps) {
   const grid = getMonthGrid(year, month)
 
   const eventsByDay = new Map<string, CalendarEvent[]>()
   for (const ev of events) {
-    const key = ev.startDt.slice(0, 10)
-    if (!eventsByDay.has(key)) eventsByDay.set(key, [])
-    eventsByDay.get(key)!.push(ev)
+    for (const key of eventDateKeys(ev)) {
+      if (!eventsByDay.has(key)) eventsByDay.set(key, [])
+      eventsByDay.get(key)!.push(ev)
+    }
   }
 
   return (

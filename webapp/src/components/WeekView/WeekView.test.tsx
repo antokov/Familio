@@ -178,3 +178,33 @@ describe('WeekView — Ganztägig-Zeile', () => {
     expect(onEventClick).toHaveBeenCalledWith(ev)
   })
 })
+
+describe('WeekView — Mehrtägige Ganztägig-Termine', () => {
+  it('zeigt einen mehrtägigen All-Day-Termin an jedem betroffenen Tag der Woche', () => {
+    const ev: CalendarEvent = {
+      id: 'ferien',
+      title: 'Ferien',
+      startDt: '2024-01-15T00:00:00',
+      endDt: '2024-01-17T23:59:00',
+      attendees: [],
+      allDay: true,
+      createdAt: '2024-01-01T00:00:00',
+    }
+    renderWeekView([ev])
+    expect(screen.getAllByText('Ferien')).toHaveLength(3)
+  })
+
+  it('zeigt den mehrtägigen Termin nicht an Tagen außerhalb seines Zeitraums', () => {
+    const ev: CalendarEvent = {
+      id: 'ferien',
+      title: 'Ferien',
+      startDt: '2024-01-15T00:00:00',
+      endDt: '2024-01-16T23:59:00',
+      attendees: [],
+      allDay: true,
+      createdAt: '2024-01-01T00:00:00',
+    }
+    renderWeekView([ev])
+    expect(screen.getAllByText('Ferien')).toHaveLength(2)
+  })
+})

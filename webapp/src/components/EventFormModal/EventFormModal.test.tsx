@@ -101,26 +101,27 @@ describe('EventFormModal — Ganztägig', () => {
     expect(screen.getByLabelText('Von')).toBeInTheDocument()
   })
 
-  it('blendet Zeit-Felder aus, wenn Ganztägig aktiviert wird', async () => {
+  it('ersetzt Zeit-Felder durch Von/Bis-Datumsfelder, wenn Ganztägig aktiviert wird', async () => {
     const user = userEvent.setup()
     renderModal()
     await user.click(screen.getByLabelText('Ganztägig'))
-    expect(screen.queryByLabelText('Von')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Bis')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Datum')).not.toBeInTheDocument()
+    expect((screen.getByLabelText('Von') as HTMLInputElement).type).toBe('date')
+    expect((screen.getByLabelText('Bis') as HTMLInputElement).type).toBe('date')
   })
 
-  it('Checkbox ist bei ganztägigem editEvent bereits aktiviert und Zeit-Felder ausgeblendet', () => {
+  it('Checkbox ist bei ganztägigem editEvent bereits aktiviert, Von/Bis sind Datumsfelder', () => {
     renderModal({ ...baseEvent, allDay: true })
     expect(screen.getByLabelText('Ganztägig')).toBeChecked()
-    expect(screen.queryByLabelText('Von')).not.toBeInTheDocument()
+    expect((screen.getByLabelText('Von') as HTMLInputElement).type).toBe('date')
   })
 
   it('zeigt Zeit-Felder wieder, wenn Ganztägig bei bestehendem Termin deaktiviert wird', async () => {
     const user = userEvent.setup()
     renderModal({ ...baseEvent, allDay: true })
     await user.click(screen.getByLabelText('Ganztägig'))
-    expect(screen.getByLabelText('Von')).toBeInTheDocument()
-    expect(screen.getByLabelText('Bis')).toBeInTheDocument()
+    expect((screen.getByLabelText('Von') as HTMLInputElement).type).toBe('time')
+    expect((screen.getByLabelText('Bis') as HTMLInputElement).type).toBe('time')
   })
 
   it('speichert mit 00:00–23:59 und allDay:true, wenn Ganztägig aktiviert ist', async () => {
@@ -143,6 +144,74 @@ describe('EventFormModal — Ganztägig', () => {
     const user = userEvent.setup()
     renderModal()
     await user.type(screen.getByLabelText('Titel *'), 'Ferienbeginn')
+    await user.click(screen.getByLabelText('Ganztägig'))
+    expect(screen.getByRole('button', { name: 'Erstellen' })).not.toBeDisabled()
+  })
+})
+
+describe('EventFormModal — Mehrtägig', () => {
+  it('füllt Von/Bis bei mehrtägigem editEvent korrekt vor', () => {
+    const event: CalendarEvent = {
+      ...baseEvent,
+      allDay: true,
+      startDt: '2026-07-20T00:00:00',
+      endDt: '2026-07-31T23:59:00',
+    }
+    renderModal(event)
+    expect((screen.getByLabelText('Von') as HTMLInputElement).value).toBe('2026-07-20')
+    expect((screen.getByLabelText('Bis') as HTMLInputElement).value).toBe('2026-07-31')
+  })
+
+  it('speichert Von/Bis als Zeitraum mit allDay:true', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderModal()
+    await user.type(screen.getByLabelText('Titel *'), 'Ferien')
+    await user.click(screen.getByLabelText('Ganztägig'))
+    await user.clear(screen.getByLabelText('Bis'))
+    await user.type(screen.getByLabelText('Bis'), '2099-12-31')
+    await user.click(screen.getByRole('button', { name: 'Erstellen' }))
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allDay: true,
+        endDt: expect.stringMatching(/^2099-12-31T23:59:00$/),
+      })
+    )
+  })
+
+  it('deaktiviert Speichern-Button, wenn Bis vor Von liegt', async () => {
+    const event: CalendarEvent = {
+      ...baseEvent,
+      allDay: true,
+      startDt: '2026-07-20T00:00:00',
+      endDt: '2026-07-20T23:59:00',
+    }
+    const user = userEvent.setup()
+    renderModal(event)
+    await user.clear(screen.getByLabelText('Bis'))
+    await user.type(screen.getByLabelText('Bis'), '2026-07-19')
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled()
+    expect(screen.getByText('Enddatum muss am oder nach dem Startdatum liegen')).toBeInTheDocument()
+  })
+
+  it('zieht Bis automatisch nach, wenn Von auf ein späteres Datum als Bis verschoben wird', async () => {
+    const event: CalendarEvent = {
+      ...baseEvent,
+      allDay: true,
+      startDt: '2026-07-20T00:00:00',
+      endDt: '2026-07-20T23:59:00',
+    }
+    const user = userEvent.setup()
+    renderModal(event)
+    await user.clear(screen.getByLabelText('Von'))
+    await user.type(screen.getByLabelText('Von'), '2026-07-25')
+    expect((screen.getByLabelText('Bis') as HTMLInputElement).value).toBe('2026-07-25')
+    expect(screen.getByRole('button', { name: 'Speichern' })).not.toBeDisabled()
+  })
+
+  it('Von == Bis (eintägiger ganztägiger Termin) bleibt gültig', async () => {
+    const user = userEvent.setup()
+    renderModal()
+    await user.type(screen.getByLabelText('Titel *'), 'Feiertag')
     await user.click(screen.getByLabelText('Ganztägig'))
     expect(screen.getByRole('button', { name: 'Erstellen' })).not.toBeDisabled()
   })

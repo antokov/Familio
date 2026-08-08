@@ -1,38 +1,38 @@
-# User Story — Ganztägige Termine
+# User Story — Mehrtägige Termine (Ferien etc.)
 
 **As a** Familienmitglied
-**I want** beim Erstellen/Bearbeiten eines Termins eine Option "Ganztägig" wählen können
-**So that** ich für Termine ohne konkrete Uhrzeit (Geburtstage, Ferien, Feiertage) keine künstliche Uhrzeit eintragen muss
+**I want** beim Anlegen eines ganztägigen Termins einen Zeitraum über mehrere Tage angeben können (z. B. "Ferien 20.–31.07.")
+**So that** ich nicht für jeden einzelnen Tag der Ferien einen eigenen Termin anlegen muss
 
 ## Acceptance Criteria
 
-**AC1 — Ganztägig aktivieren beim Anlegen**
-Given ich lege einen neuen Termin an,
-When ich die Checkbox "Ganztägig" aktiviere,
-Then verschwinden die Uhrzeit-Felder (Von/Bis) und nur das Datum bleibt editierbar.
+**AC1 — Von/Bis-Datumsfelder bei Ganztägig**
+Given ich aktiviere "Ganztägig" beim Anlegen eines Termins,
+When das Formular neu rendert,
+Then sehe ich zwei Datumsfelder ("Von" und "Bis") statt eines einzelnen "Datum"-Felds.
 
-**AC2 — Darstellung im Kalender**
-Given ich habe "Ganztägig" aktiviert und speichere,
-When der Termin angelegt wird,
-Then wird er ohne Uhrzeit dargestellt — in der Monatsansicht wie gehabt als Pill, in der Wochenansicht in einer eigenen "Ganztägig"-Zeile oberhalb des Stunden-Rasters, nicht als zeitgebundener Block darin.
+**AC2 — Darstellung im Monat**
+Given ich lege einen ganztägigen Termin mit "Von" 20.07. und "Bis" 31.07. an,
+When ich die Monatsansicht öffne,
+Then erscheint der Termin als Pill an jedem Tag im Zeitraum 20.–31.07. (inklusive), nicht nur am 20.07.
 
-**AC3 — Bearbeiten eines ganztägigen Termins**
-Given ich bearbeite einen bestehenden ganztägigen Termin,
-When ich das Bearbeiten-Modal öffne,
-Then ist die Checkbox "Ganztägig" bereits aktiviert und die Uhrzeit-Felder sind ausgeblendet.
-
-**AC4 — Ganztägig deaktivieren**
-Given ich deaktiviere "Ganztägig" bei einem Termin (neu oder bestehend),
-When ich die Checkbox abwähle,
-Then erscheinen wieder Uhrzeit-Felder mit sinnvollen Standardwerten, die ich vor dem Speichern anpassen kann.
-
-**AC5 — Mehrere ganztägige Termine am selben Tag**
-Given mehrere ganztägige Termine liegen am selben Tag,
+**AC3 — Darstellung in der Woche**
+Given derselbe mehrtägige Termin liegt in der aktuell angezeigten Woche,
 When ich die Wochenansicht öffne,
-Then werden sie alle in der Ganztägig-Zeile für diesen Tag angezeigt, ohne den Stunden-Raster-Bereich zu verdecken oder zu überlappen.
+Then erscheint er in der "Ganztägig"-Zeile an jedem betroffenen Tag dieser Woche.
+
+**AC4 — Bearbeiten eines mehrtägigen Termins**
+Given ich bearbeite einen bestehenden mehrtägigen ganztägigen Termin,
+When ich das Bearbeiten-Modal öffne,
+Then sind "Von" und "Bis" korrekt mit dem gespeicherten Zeitraum vorausgefüllt.
+
+**AC5 — Ungültiger Zeitraum wird verhindert**
+Given ich setze "Bis" auf ein Datum vor "Von" (oder "Von" nach "Bis"),
+When das passiert,
+Then wird das verhindert bzw. validiert (Speichern-Button deaktiviert, Fehlermeldung), sodass kein ungültiger Zeitraum gespeichert werden kann.
 
 ## Out of Scope
 
-- Mehrtägige, zusammenhängende ganztägige Termine (z. B. "Ferien 20.–31.07." als ein Balken über mehrere Tage) — v1 bleibt bei eintägigen ganztägigen Terminen, ein Termin pro Kalendertag.
-- Automatische Umstellung bestehender Termine mit einem 00:00–23:59-Zeitraum (z. B. aus der Dokumenten-Extraktion) auf `all_day=true` — bestehende Daten bleiben unverändert.
-- Datenbank-Migration via Alembic für die neue Spalte — folgt dem bestehenden, bekannten Muster (siehe Backlog FS-09), betrifft dieses Feature nicht anders als frühere Spalten-Änderungen.
+- Mehrtägige Termine mit konkreter Uhrzeit (z. B. Geschäftsreise Tag 1 09:00 – Tag 3 17:00) — bleibt exklusiv für ganztägige Termine, wie bereits in "Ganztägige Termine" festgelegt.
+- Durchgehende visuelle Balkendarstellung über mehrere Tage/Spalten hinweg (wie in Google Calendar) — v1 zeigt den Termin als wiederholte Pill an jedem betroffenen Tag, kein zusammenhängender Balken über Spaltengrenzen hinweg.
+- Migration bestehender Termine — reine additive UI-Erweiterung, das Backend unterstützt beliebige Zeiträume bereits unverändert.

@@ -1,50 +1,45 @@
-# Design Decision — Ganztägige Termine
+# Design Decision — Mehrtägige Termine (Ferien etc.)
 
 ## Scope
 
-- `EventFormModal.tsx` — neue Checkbox "Ganztägig" zwischen Datum-Feld und Zeit-Row.
-- `WeekView.tsx` — neue "Ganztägig"-Zeile zwischen Tages-Header und scrollbarem Stunden-Raster.
-- `MonthView.tsx` — **keine** Änderung.
+- `EventFormModal.tsx` — Von/Bis-Datums-Zeile ersetzt das einzelne "Datum"-Feld, wenn "Ganztägig" aktiv ist.
+- `MonthView.tsx` / `WeekView.tsx` — **keine visuellen Änderungen**, nur erweiterte Datenzuordnung (bestehende Pill-Darstellung wird pro Tag wiederverwendet, siehe Story "Out of Scope": kein durchgehender Balken in v1).
 
 ## Layout
 
-**EventFormModal — Checkbox:**
-Eigene `.field`-Zeile (gleiches vertikales Rhythmus-Pattern wie Titel/Datum/Beschreibung), aber horizontal: natives `<input type="checkbox">` (18×18px, wie in `ExtractEventsModal` etabliert) + Label "Ganztägig" daneben, `gap: var(--space-2)`. Direkt unter dem Datum-Feld, vor der Zeit-Row — logische Lese-Reihenfolge: Titel → Datum → (Ganztägig?) → Zeiten.
+**EventFormModal — Von/Bis-Datums-Zeile:**
+Exakt das gleiche Grid-Layout wie die bestehende Zeit-Row (`grid-template-columns: 1fr 1fr; gap: var(--space-3)`), nur mit zwei `type="date"`-Inputs statt `type="time"`. Ersetzt positionsgleich das bisherige einzelne "Datum"-Feld — kein Layout-Sprung, die Checkbox "Ganztägig" bleibt an ihrer Stelle direkt darunter.
 
-Bei aktivierter Checkbox: die komplette `.timeRow`-Div (Von/Bis-Felder) wird aus dem DOM entfernt (`{!allDay && <div className={styles.timeRow}>…}`), kein Platzhalter, Formular wird kompakter — kein "leerer Bereich"-Effekt.
+```
+[ Von-Datum ]  [ Bis-Datum ]
+      ☐ Ganztägig
+```
 
-**WeekView — Ganztägig-Zeile:**
-Neue Zeile mit identischem `grid-template-columns: 48px repeat(7, 1fr)` wie `.headerRow`/`.body`, direkt zwischen `.headerRow` und `.scrollArea` platziert, `border-bottom: 1px solid var(--color-border)` zur Abgrenzung vom Stunden-Raster darunter. **Wird nur gerendert, wenn mindestens ein All-Day-Event in der sichtbaren Woche existiert** — spart Platz in der Normalwoche ohne Geburtstage/Ferien.
+wird bei aktivem Ganztägig zu derselben Position, nur mit zwei Feldern statt einem:
 
-- Linke Gutter-Zelle (48px): kleines, vertikal zentriertes Label „Ganztägig" (`--font-size-xs`, `--color-text-muted`, kein Rotieren — bei 48px Breite reicht normaler Zeilenumbruch/kleine Schrift), analog zur Google-Calendar-Konvention.
-- Je Tagesspalte: vertikaler Stack aus Pills (max. 2 sichtbar, danach "+N weitere" analog `MonthView.moreLabel`), `padding: var(--space-1) var(--space-2)`, `gap: 2px` zwischen den Pills.
+```
+[ Von-Datum ]  [ Bis-Datum ]
+      ☑ Ganztägig
+```
+
+Fehlermeldung bei ungültigem Bereich exakt im gleichen Stil wie die bestehende Zeit-Validierung ("Endzeit muss nach Startzeit liegen" → "Enddatum muss am oder nach dem Startdatum liegen"), unter dem "Bis"-Feld.
 
 ## Token Usage
 
-| Element | Token |
-|---|---|
-| Checkbox-Akzent (EventFormModal) | `--color-primary` (`accent-color`, konsistent mit `ExtractEventsModal`) |
-| Ganztägig-Zeile Trennlinie | `--color-border` (`border-bottom`, 1px) |
-| Gutter-Label „Ganztägig" | `--color-text-muted`, `--font-size-xs` |
-| Pill-Hintergrund | Event-Attendee-Farbe bzw. `--color-primary` Fallback (identische Logik zu `eventColor()` in `MonthView`/`WeekView`) |
-| Pill-Text | `#fff` (wie bestehende `.pill`/`.eventTitle`) |
-| Pill-Radius | `--radius-sm` |
-| „+N weitere"-Text | `--color-text-muted`, `--font-size-xs` (wie `MonthView.moreLabel`) |
-| Zeilen-Innenabstand | `--space-1`/`--space-2` |
+Keine neuen Tokens — alle Werte aus der bestehenden `.timeRow`/`.input`/`.inputError`/`.timeErrorMsg`-Definition werden 1:1 für die neue `.dateRow`-Klasse übernommen (`--space-3` Gap, `--color-accent` für Fehlerzustand, `--font-size-xs` für Fehlertext).
 
 ## Interactions
 
-- Checkbox-Toggle: sofortiges Aus-/Einblenden der Zeit-Row (kein Fade/Transition — konsistent mit dem Rest des Formulars, das keine Feld-Transitions verwendet).
-- Ganztägig-Pills in `WeekView`: `onClick` öffnet das Bearbeiten-Modal (gleiche Handler-Signatur wie bestehende `eventBlock`-Pills), `hover: opacity 0.85` (identisch zu `.eventBlock:hover`).
-- "+N weitere"-Label: rein informativ, kein Klick-Handler in v1 (konsistent mit `MonthView`, das ebenfalls keinen Klick auf das Label hat).
+- Auto-Korrektur (siehe `arch-decision.md`): Wenn "Von" nach "Bis" verschoben wird, springt "Bis" automatisch mit — kein blockierender Fehlerzustand für diesen häufigsten Fall, nur echte manuelle Rückwärts-Eingabe im "Bis"-Feld selbst zeigt den Fehlerzustand (roter Rand + Text), analog zur bestehenden Zeit-Validierung.
+- Keine Animation beim Wechsel Datum↔Von/Bis (konsistent mit der bereits getroffenen Entscheidung aus "Ganztägige Termine": kein Transition-Overhead für ein Utility-Formular).
+- MonthView/WeekView-Pills: unverändertes Hover-/Klick-Verhalten, jetzt einfach an mehreren Tagen statt nur einem sichtbar.
 
 ## Signature Element
 
-Das kleine, vertikal zentrierte "Ganztägig"-Label im linken Gutter der neuen Zeile — macht auf einen Blick klar, was diese Zeile von der Stunden-Achse darunter unterscheidet, ohne zusätzliche Erklärung im UI.
+Keins — dieses Feature erweitert bestehende, bereits etablierte visuelle Muster (Pills in Monat/Woche) rein datentechnisch, ohne neues visuelles Element einzuführen. Konsistenz mit dem Bestehenden ist hier wichtiger als ein neues Signature-Element.
 
 ## Avoid
 
-- Keine Custom-Checkbox-Komponente — natives `<input type="checkbox">` reicht (gleiches Pattern wie `ExtractEventsModal`).
-- Keine Animation/Transition beim Ein-/Ausblenden der Zeit-Row — Formular bleibt sofort reaktionsfähig, keine unnötige Bewegungs-Komplexität für ein Utility-Feature.
-- Keine mehrtägigen Balken-Termine in der Ganztägig-Zeile (Out of Scope) — jede Zelle zeigt nur Termine dieses einen Tages.
-- "New Tokens Needed": keine — alle benötigten Werte existieren bereits in `tokens.css`.
+- Kein durchgehender Balken über mehrere Tage/Wochen-Spalten hinweg (Out of Scope) — würde `grid-column`-Spanning-CSS in `WeekView` und tageübergreifende Positionsberechnung in `MonthView` erfordern; deutlich höherer Aufwand für v1 ohne entsprechenden AC.
+- Keine neue Datums-Picker-Komponente — natives `<input type="date">` reicht, wie überall sonst im Formular.
+- "New Tokens Needed": keine.
