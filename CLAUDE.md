@@ -55,10 +55,10 @@ kovacevicapp/
 
   android/           # Android App (Kotlin / Jetpack Compose)
     app/src/main/
-      kotlin/com/kovacevic/
-        ui/          # Compose Screens
-        data/        # Repository + API-Calls (Retrofit)
-        domain/      # Use Cases
+      kotlin/com/kovacevic/familio/
+        ui/          # Compose Screens + ViewModels (dashboard, calendar, tasks, shopping, documents, settings)
+        data/        # model/ (DTOs), remote/ (Retrofit ApiService), local/ (DataStore), repository/
+        di/          # AppContainer (manueller DI-Container, kein Hilt)
 
   docker/            # Docker Compose für NAS-Deployment
     docker-compose.yml
@@ -106,6 +106,9 @@ kovacevicapp/
 | `webapp/src/components/QuickAddBar/QuickAddBar.tsx` | Fixe Eingabeleiste am Seitenende (Tab-Nav, Enter-Submit) |
 | `backend/app/routers/documents.py` | Dokumenten-Upload/-Download (multipart), lokales Dateisystem-Storage unter `settings.upload_dir` |
 | `docker/docker-compose.yml` | NAS-Deployment |
+| `android/app/src/main/kotlin/com/kovacevic/familio/data/remote/ApiService.kt` | Retrofit-Interface, spiegelt alle Backend-Endpunkte |
+| `android/app/src/main/kotlin/com/kovacevic/familio/di/AppContainer.kt` | Manueller DI-Container (Retrofit/OkHttp/Repositories/Coil) |
+| `android/app/src/main/kotlin/com/kovacevic/familio/data/local/SettingsDataStore.kt` | Server-URL (Settings-Screen) + Theme-Mode, persistiert via DataStore |
 
 ---
 
@@ -143,4 +146,6 @@ kovacevicapp/
 
 ## Current State
 
-Dashboard zeigt ausschließlich echte DB-Daten (Kalender, Aufgaben, Einkauf — kein Mock mehr). Einkaufsliste mit Backend-API, `useShoppingListApi`-Hook und `QuickAddBar` (fixiert am Viewport-Rand). Kalender (MonthView + WeekView), Aufgaben (CRUD + Recurrence), Familienmitglieder (CRUD), Dokumente (Upload/Download/Zuweisung/Löschen, In-App-Vorschau für PDF/Bilder via `DocumentPreviewModal`, lokales Dateisystem-Storage) und Settings-Seite aktiv. **Auto-Cleanup aktiv:** Erledigte Aufgaben und gecheckte Einkaufseinträge werden nach 6h beim nächsten GET gelöscht (Lazy Deletion, kein Scheduler). Guard: nur Einträge mit gesetztem `completed_at`/`checked_at` werden gelöscht — Altdaten bleiben. Backend: SQLite (Dev) / PostgreSQL (Prod). **Deployment-Hinweis:** Coolify-Backend braucht ein persistentes Volume auf `/app/uploads`, sonst gehen Dokumente bei jedem Redeploy verloren (siehe Backlog FS-27). Nächster Schritt: E2E-Tests oder Android-App.
+Dashboard zeigt ausschließlich echte DB-Daten (Kalender, Aufgaben, Einkauf — kein Mock mehr). Einkaufsliste mit Backend-API, `useShoppingListApi`-Hook und `QuickAddBar` (fixiert am Viewport-Rand). Kalender (MonthView + WeekView), Aufgaben (CRUD + Recurrence), Familienmitglieder (CRUD), Dokumente (Upload/Download/Zuweisung/Löschen, In-App-Vorschau für PDF/Bilder via `DocumentPreviewModal`, lokales Dateisystem-Storage) und Settings-Seite aktiv. **Auto-Cleanup aktiv:** Erledigte Aufgaben und gecheckte Einkaufseinträge werden nach 6h beim nächsten GET gelöscht (Lazy Deletion, kein Scheduler). Guard: nur Einträge mit gesetztem `completed_at`/`checked_at` werden gelöscht — Altdaten bleiben. Backend: SQLite (Dev) / PostgreSQL (Prod). **Deployment-Hinweis:** Coolify-Backend hat ein persistentes Directory Mount auf `/app/uploads` (Host: `/mnt/data/familio/uploads`, HDD statt System-SSD) — Dokumente überleben Redeploys (FS-27 erledigt).
+
+**Android-App (native, Kotlin/Compose) fertig gebaut** — bildet alle Webapp-Features 1:1 nach: Dashboard, Kalender (Monat/Woche, Custom-Grid), Aufgaben, Einkauf (inkl. Quick-Add-Bar), Dokumente (Upload/Download/Vorschau/Zuweisung), Settings (Familie-CRUD, Theme, **konfigurierbare Server-URL** — im Gegensatz zur Webapp, die `VITE_API_URL` fix zur Buildzeit setzt, braucht die Android-App das zur Laufzeit, da sie sich von unterschiedlichen Geräten/Netzwerken aus mit dem NAS verbindet). Architektur: MVVM, manueller DI-Container (kein Hilt), Retrofit+kotlinx.serialization (snake_case↔camelCase automatisch über `JsonNamingStrategy.SnakeCase`), Server-URL zur Laufzeit änderbar über einen OkHttp-Interceptor, der die Zielhost umschreibt (Retrofit selbst bleibt auf einer Platzhalter-Base-URL). Kein Auth (Backend hat aktuell keins). Build-Setup siehe Memory `android_build_setup`. Noch nicht erledigt: manuelles Durchklicken auf echtem Gerät/Emulator (nur `assembleDebug` lokal verifiziert), automatisierte Tests. Nächster Schritt: App auf Gerät/Emulator testen, danach ggf. E2E-Tests (Web) oder Auth.

@@ -26,6 +26,8 @@ webapp/.vite/
 
 # ── Android ───────────────────────────────────────────────────────────────────
 android/.gradle/
+android/.kotlin/
+android/build/
 android/app/build/
 android/local.properties
 
