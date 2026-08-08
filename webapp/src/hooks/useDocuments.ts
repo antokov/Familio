@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import type { Document } from '../types/document'
+import type { Document, ExtractedEventCandidate } from '../types/document'
 import { API_BASE } from '../api/config'
 
 function fromApi(raw: Record<string, unknown>): Document {
@@ -10,6 +10,15 @@ function fromApi(raw: Record<string, unknown>): Document {
     sizeBytes: raw['size_bytes'] as number,
     familyMemberId: (raw['family_member_id'] as string | null) ?? null,
     uploadedAt: raw['uploaded_at'] as string,
+  }
+}
+
+function eventFromApi(raw: Record<string, unknown>, index: number): ExtractedEventCandidate {
+  return {
+    id: `candidate-${index}`,
+    title: raw['title'] as string,
+    startDt: raw['start_dt'] as string,
+    endDt: raw['end_dt'] as string,
   }
 }
 
@@ -97,5 +106,32 @@ export function useDocuments() {
     return `${API_BASE}/api/documents/${id}/view`
   }
 
-  return { documents, loading, error, uploadDocument, reassignDocument, deleteDocument, downloadUrl, viewUrl }
+  const extractEvents = useCallback(
+    async (id: string): Promise<{ events: ExtractedEventCandidate[] } | { error: string }> => {
+      try {
+        const res = await fetch(`${API_BASE}/api/documents/${id}/extract-events`, { method: 'POST' })
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { detail?: string } | null
+          return { error: body?.detail ?? 'Termine konnten nicht extrahiert werden' }
+        }
+        const raw = (await res.json()) as { events: Record<string, unknown>[] }
+        return { events: raw.events.map(eventFromApi) }
+      } catch {
+        return { error: 'Termine konnten nicht extrahiert werden' }
+      }
+    },
+    []
+  )
+
+  return {
+    documents,
+    loading,
+    error,
+    uploadDocument,
+    reassignDocument,
+    deleteDocument,
+    downloadUrl,
+    viewUrl,
+    extractEvents,
+  }
 }

@@ -43,6 +43,15 @@
   font-weight: 600;
 }
 
+.successBanner {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background-color: rgba(74, 158, 114, 0.12);
+  color: var(--color-success);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
 .loadingText {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);

@@ -72,13 +72,13 @@ kovacevicapp/
 1. **Familienkalender** — gemeinsame Termine, Wiederholungen, Erinnerungen
 2. **Aufgaben** — persönliche & gemeinsame To-Dos mit Zuweisung an Familienmitglieder
 3. **Einkaufslisten** — mehrere Listen, Kategorien, Live-Sync zwischen Geräten
-4. **Dokumente** — Datei-Upload (PDF/Office/Bilder, max. 20 MB) mit Zuweisung an ein Familienmitglied, Download, Löschen
+4. **Dokumente** — Datei-Upload (PDF/Office/Bilder, max. 20 MB) mit Zuweisung an ein Familienmitglied, Download, Löschen. Für PDF/Bild-Dokumente zusätzlich: **Termine aus Dokument extrahieren** — Claude API analysiert das Dokument, Nutzer prüft/bearbeitet die Vorschläge in einem Review-Dialog, erst nach Bestätigung werden Kalendertermine angelegt (kein Autocreate ohne Review)
 
 ---
 
 ## Key Patterns
 
-- **Repository Pattern:** Alle DB-Zugriffe über Repository-Klassen (`app/services/`)
+- **Router-First:** DB-Zugriffe laufen direkt im Router (`AsyncSession` inline) — kein DB-Repository-Layer. `app/services/` (seit "Termine aus Dokument extrahieren") kapselt stattdessen Business-Logik ohne direkten DB-Bezug, aktuell die Claude-API-Anbindung (`document_extraction.py`); Router bleiben dünn und rufen den Service auf
 - **Schema-first:** Pydantic-Schemas definieren API-Vertrag, getrennt von DB-Modellen
 - **Feature-Router:** Je Feature ein eigener FastAPI-Router (`routers/calendar.py` etc.)
 - **Shared Types:** TypeScript-Typen werden aus dem OpenAPI-Schema generiert (openapi-ts)
@@ -105,6 +105,8 @@ kovacevicapp/
 | `webapp/src/pages/ShoppingPage.tsx` | Einkaufsliste — inkl. QuickAddBar (Schnellerfassung) |
 | `webapp/src/components/QuickAddBar/QuickAddBar.tsx` | Fixe Eingabeleiste am Seitenende (Tab-Nav, Enter-Submit) |
 | `backend/app/routers/documents.py` | Dokumenten-Upload/-Download (multipart), lokales Dateisystem-Storage unter `settings.upload_dir` |
+| `backend/app/services/document_extraction.py` | Claude-API-Anbindung für "Termine aus Dokument extrahieren" — PDF/Bild als Content-Block, Structured Output (JSON-Schema), keine Persistenz |
+| `webapp/src/components/ExtractEventsModal/ExtractEventsModal.tsx` | Review-Dialog für extrahierte Terminvorschläge (editierbar, ab-/anwählbar) — Pflicht-Schritt vor `POST /api/events` |
 | `docker/docker-compose.yml` | NAS-Deployment |
 | `android/app/src/main/kotlin/com/kovacevic/familio/data/remote/ApiService.kt` | Retrofit-Interface, spiegelt alle Backend-Endpunkte |
 | `android/app/src/main/kotlin/com/kovacevic/familio/di/AppContainer.kt` | Manueller DI-Container (Retrofit/OkHttp/Repositories/Coil) |
@@ -123,6 +125,8 @@ kovacevicapp/
 | `POSTGRES_PASSWORD` | DB-Passwort (Docker) | Yes |
 | `UPLOAD_DIR` | Verzeichnis für Dokumenten-Uploads (Default `./uploads`) | No |
 | `MAX_UPLOAD_SIZE_MB` | Max. Upload-Dateigröße in MB (Default `20`) | No |
+| `ANTHROPIC_API_KEY` | Claude-API-Key für "Termine aus Dokument extrahieren" — ohne Key liefert der Endpoint 503 | No |
+| `ANTHROPIC_MODEL` | Claude-Modell für Dokumenten-Extraktion (Default `claude-sonnet-5`) | No |
 
 ---
 
@@ -146,6 +150,6 @@ kovacevicapp/
 
 ## Current State
 
-Dashboard zeigt ausschließlich echte DB-Daten (Kalender, Aufgaben, Einkauf — kein Mock mehr). Einkaufsliste mit Backend-API, `useShoppingListApi`-Hook und `QuickAddBar` (fixiert am Viewport-Rand). Kalender (MonthView + WeekView), Aufgaben (CRUD + Recurrence), Familienmitglieder (CRUD), Dokumente (Upload/Download/Zuweisung/Löschen, In-App-Vorschau für PDF/Bilder via `DocumentPreviewModal`, lokales Dateisystem-Storage) und Settings-Seite aktiv. **Auto-Cleanup aktiv:** Erledigte Aufgaben und gecheckte Einkaufseinträge werden nach 6h beim nächsten GET gelöscht (Lazy Deletion, kein Scheduler). Guard: nur Einträge mit gesetztem `completed_at`/`checked_at` werden gelöscht — Altdaten bleiben. Backend: SQLite (Dev) / PostgreSQL (Prod). **Deployment-Hinweis:** Coolify-Backend hat ein persistentes Directory Mount auf `/app/uploads` (Host: `/mnt/data/familio/uploads`, HDD statt System-SSD) — Dokumente überleben Redeploys (FS-27 erledigt).
+Dashboard zeigt ausschließlich echte DB-Daten (Kalender, Aufgaben, Einkauf — kein Mock mehr). Einkaufsliste mit Backend-API, `useShoppingListApi`-Hook und `QuickAddBar` (fixiert am Viewport-Rand). Kalender (MonthView + WeekView), Aufgaben (CRUD + Recurrence), Familienmitglieder (CRUD), Dokumente (Upload/Download/Zuweisung/Löschen, In-App-Vorschau für PDF/Bilder via `DocumentPreviewModal`, lokales Dateisystem-Storage, **Termine aus Dokument extrahieren** via Claude API mit verpflichtendem Review-Dialog vor Anlage) und Settings-Seite aktiv. **Auto-Cleanup aktiv:** Erledigte Aufgaben und gecheckte Einkaufseinträge werden nach 6h beim nächsten GET gelöscht (Lazy Deletion, kein Scheduler). Guard: nur Einträge mit gesetztem `completed_at`/`checked_at` werden gelöscht — Altdaten bleiben. Backend: SQLite (Dev) / PostgreSQL (Prod). **Deployment-Hinweis:** Coolify-Backend hat ein persistentes Directory Mount auf `/app/uploads` (Host: `/mnt/data/familio/uploads`, HDD statt System-SSD) — Dokumente überleben Redeploys (FS-27 erledigt). Für die Dokumenten-Extraktion muss auf dem Server zusätzlich `ANTHROPIC_API_KEY` gesetzt werden (sonst 503 beim Extrahieren, alles andere funktioniert unverändert).
 
 **Android-App (native, Kotlin/Compose) fertig gebaut** — bildet alle Webapp-Features 1:1 nach: Dashboard, Kalender (Monat/Woche, Custom-Grid), Aufgaben, Einkauf (inkl. Quick-Add-Bar), Dokumente (Upload/Download/Vorschau/Zuweisung), Settings (Familie-CRUD, Theme, **konfigurierbare Server-URL** — im Gegensatz zur Webapp, die `VITE_API_URL` fix zur Buildzeit setzt, braucht die Android-App das zur Laufzeit, da sie sich von unterschiedlichen Geräten/Netzwerken aus mit dem NAS verbindet). Architektur: MVVM, manueller DI-Container (kein Hilt), Retrofit+kotlinx.serialization (snake_case↔camelCase automatisch über `JsonNamingStrategy.SnakeCase`), Server-URL zur Laufzeit änderbar über einen OkHttp-Interceptor, der die Zielhost umschreibt (Retrofit selbst bleibt auf einer Platzhalter-Base-URL). Kein Auth (Backend hat aktuell keins). Build-Setup siehe Memory `android_build_setup`. Noch nicht erledigt: manuelles Durchklicken auf echtem Gerät/Emulator (nur `assembleDebug` lokal verifiziert), automatisierte Tests. Nächster Schritt: App auf Gerät/Emulator testen, danach ggf. E2E-Tests (Web) oder Auth.

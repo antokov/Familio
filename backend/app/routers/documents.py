@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.models.document import Document
-from app.schemas.document import DocumentResponse, DocumentUpdate
+from app.schemas.document import DocumentResponse, DocumentUpdate, ExtractEventsResponse
+from app.services.document_extraction import DocumentExtractionError, extract_events
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
@@ -113,6 +114,18 @@ async def view_document(document_id: str, db: AsyncSession = Depends(get_db)) ->
         filename=document.filename,
         content_disposition_type="inline",
     )
+
+
+@router.post("/{document_id}/extract-events", response_model=ExtractEventsResponse)
+async def extract_document_events(
+    document_id: str, db: AsyncSession = Depends(get_db)
+) -> ExtractEventsResponse:
+    document, file_path = await _get_document_file(document_id, db)
+    try:
+        events = await extract_events(file_path, document.content_type)
+    except DocumentExtractionError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    return ExtractEventsResponse(events=events)
 
 
 @router.delete("/{document_id}", status_code=204)

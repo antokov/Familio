@@ -6,3 +6,22 @@ export interface Document {
   familyMemberId: string | null
   uploadedAt: string
 }
+
+export interface ExtractedEventCandidate {
+  id: string
+  title: string
+  startDt: string
+  endDt: string
+}
+
+const EXTRACTABLE_CONTENT_TYPES = new Set([
+  'application/pdf',
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+])
+
+export function isExtractable(contentType: string): boolean {
+  return EXTRACTABLE_CONTENT_TYPES.has(contentType)
+}

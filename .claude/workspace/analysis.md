@@ -1,26 +1,41 @@
-# BA Analysis — Dokumenten-Vorschau in der App
+# BA Analysis — Termine aus Dokument extrahieren
 
 ## Business Rules
 
-1. Vorschaufähige Typen sind auf Browser-nativ darstellbare Formate beschränkt: PDF (via `<iframe>`/`<embed>`, Browser-natives PDF-Rendering) und Bilder (`jpg`, `jpeg`, `png`, `gif`, `heic` via `<img>`).
-2. Alle anderen erlaubten Upload-Typen (`doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`, `txt`, `zip`) zeigen einen Fallback-Hinweis statt eines Vorschauversuchs — kein Rendering-Versuch, der scheitern könnte.
-3. Die Vorschau nutzt den bereits bestehenden `/api/documents/{id}/view`-Endpoint (inline `Content-Disposition`) — kein neuer Backend-Endpoint nötig.
-4. Der bisherige "Ansehen"-Button (öffnet neuen Tab) wird durch das In-App-Modal **ersetzt**, nicht ergänzt — der Story-Auftrag ist explizit "kein neuer Tab".
+1. Der "Termine extrahieren"-Button ist nur für Dokumente mit `content_type` `application/pdf` oder `image/{jpeg,png,gif,webp}` sichtbar/aktiv. Für alle anderen Typen (Office, txt, heic, zip) ist er nicht verfügbar.
+2. Die Extraktion läuft synchron im Request-Response-Zyklus (kein Background-Job/Queue) — bei wenigen Seiten dauert das wenige Sekunden, ein Ladezustand im UI reicht.
+3. Das Extraktionsergebnis wird **nicht** in der Datenbank gespeichert. Es gibt kein neues "candidate events"-Modell — die Vorschläge leben nur im Frontend-State, bis der Nutzer im Review-Dialog bestätigt.
+4. Jeder vom Nutzer bestätigte Vorschlag wird über den bereits bestehenden `POST /api/events`-Endpoint angelegt (sequenziell, ein Request pro Termin) — kein neuer Bulk-Create-Endpoint nötig.
+5. Die KI muss Datum/Uhrzeit im ISO-8601-Format liefern, damit das Ergebnis direkt mit dem bestehenden `EventCreate`-Schema kompatibel ist. Das wird über Structured Outputs (`output_config.format` mit JSON-Schema) erzwungen — kein Freitext-Parsing per Regex.
+6. Fehlt im Dokument eine Uhrzeit zu einem Termin, wird er als ganztägig behandelt (Start `00:00`, Ende `23:59` desselben Tages als Default) — im Review-Dialog vom Nutzer korrigierbar.
+7. `ANTHROPIC_API_KEY` ist ein neues, optionales Environment-Secret. Ist es nicht gesetzt, liefert der Endpoint einen klaren Fehler (503) statt eines Crashs.
+8. Kosten pro Extraktion liegen im niedrigen Cent-Bereich (Modell: Sonnet 5) — kein Rate-Limiting/Kostendeckel in v1 nötig.
 
 ## Edge Cases
 
-1. **HEIC-Bilder:** Werden von den meisten Desktop-Browsern (Chrome/Firefox) NICHT nativ im `<img>`-Tag gerendert (fehlende Codec-Unterstützung) — obwohl HEIC in der Upload-Allowlist ist. Muss wie ein nicht-vorschaufähiger Typ behandelt werden (Fallback-Hinweis), sonst zeigt der Browser ein kaputtes Bild-Icon.
-2. **PDF-Rendering schlägt fehl** (z. B. sehr alter Browser ohne PDF-Viewer-Plugin): Kein expliziter Error-Handler nötig für diesen Nischenfall — Browser zeigen in aller Regel einen eigenen "Download statt Anzeige"-Hinweis im iframe selbst. Kein Blocker.
-3. **Sehr große Bilder/PDFs (nah am 20-MB-Limit):** Modal muss scrollbar sein, darf Viewport nicht sprengen — reines CSS-Constraint (`max-height`, `overflow`), kein funktionaler Edge Case.
-4. **Datei auf Platte fehlt** (analog zum bestehenden Download-Fall): `/view`-Endpoint liefert bereits 404 — Frontend zeigt im Preview-Bereich einen Fehlertext statt eines kaputten iframe/img.
-5. **Klick auf "Ansehen" bei bereits offenem Modal für ein anderes Dokument:** Modal-State ist an das ausgewählte Dokument gebunden (analog zu `editingTask`-Pattern in `TasksPage`) — zweiter Klick ersetzt einfach den Inhalt, kein Stacking mehrerer Modals.
+1. **Keine Termine erkannt** → API liefert leere `events`-Liste, Frontend zeigt "Keine Termine gefunden" statt leerem Dialog.
+2. **Sehr viele Termine** (> 50) → Review-Liste muss scrollbar sein; kein Hard-Limit in v1. Output ist durch `max_tokens` des Modells begrenzt (Truncation-Risiko bei extrem langen Dokumenten — akzeptiertes Risiko für v1).
+3. **Mehrseitiges Dokument** → App-seitiges Upload-Limit von 20 MB ist der praktische Deckel; Sonnet 5 hat 1M-Context-Fenster, das reicht für typische Quartalspläne locker.
+4. **Mehrdeutiges/fehlendes Jahr** im Dokument (z. B. "15. März" ohne Jahreszahl) → Prompt muss die KI explizit anweisen, das Jahr aus dem Dokumentkontext (Deckblatt, Zeitraum-Angabe) abzuleiten, notfalls aktuelles/nächstes plausibles Jahr zu wählen.
+5. **Claude API nicht erreichbar / Timeout / Rate-Limit / kein API-Key** → sauberer Fehler im UI, kein Absturz, keine Termine angelegt.
+6. **Doppelklick auf "Termine extrahieren"** → Button muss während laufendem Request disabled sein (kein Doppel-Call, keine doppelten Kosten).
+7. **Überschneidung mit bestehendem Kalendertermin** → keine automatische Konflikterkennung in v1 (Termine werden wie bei manueller Eingabe einfach angelegt).
+8. **Nutzer bearbeitet Vorschlag im Review-Dialog, Ende liegt vor Start** → gleiche Validierungslogik wie im bestehenden `EventFormModal` (Start < Ende).
+9. **Nicht unterstützter Dateityp wird trotzdem angefragt** (z. B. manipulierter Request) → Backend validiert `content_type` serverseitig zusätzlich zur UI-Sperre (415 Unsupported Media Type).
 
 ## Data Model Implications
 
-Keine. Reine Frontend-Änderung — nutzt bestehende `viewUrl()`-Funktion aus `useDocuments.ts` und das bestehende `contentType`-Feld aus `Document` (zur Entscheidung PDF vs. Bild vs. Fallback).
+- **Kein neues DB-Modell.** Die Extraktion ist ein reiner Analyse-Schritt, kein persistenter State.
+- **Neue Pydantic-Response-Schemas** (nicht DB-gebunden): `ExtractedEvent` (title, start_dt, end_dt) und `ExtractEventsResponse` (events: list[ExtractedEvent]).
+- **Neue Config-Werte** in `Settings`: `anthropic_api_key: str | None`, `anthropic_model: str` (Default `"claude-sonnet-5"`).
+- **Neue Dependency**: `anthropic`-Python-SDK in `requirements.txt`.
+- Bestehendes `CalendarEvent`-Modell/Schema bleibt unverändert — extrahierte Termine werden 1:1 über `EventCreate` (bestehend) angelegt, ganz ohne Attendees (leere Liste), analog zur manuellen Eingabe ohne Zuweisung.
 
 ## Open Questions
 
-1. **NON-BLOCKING:** HEIC-Behandlung als "nicht vorschaufähig" statt Rendering-Versuch — pragmatische Entscheidung wegen fehlender Browser-Unterstützung, konsistent mit AC3.
+**BLOCKING:** Keine. Die zentralen Entscheidungen (Review-Pflicht vor Anlage, unterstützte Formate, Modellwahl Sonnet 5, Default-Ganztags-Zeit bei fehlender Uhrzeit) wurden bereits im Vorgespräch mit dem Nutzer geklärt bzw. sind vertretbare, im Review-Schritt korrigierbare Standardannahmen für ein v1.
 
-Keine BLOCKING-Fragen — Pipeline läuft ohne Eskalation weiter.
+**NON-BLOCKING (Annahmen, dokumentiert):**
+- Default bei fehlender Uhrzeit: ganztägig (00:00–23:59), nicht z. B. "09:00–10:00" — nachvollziehbarer für Nutzer, im Review korrigierbar.
+- Keine Attendee-Zuweisung im Review-Dialog — hält v1 schlank, passt zum "Out of Scope" der Story.
+- Kein Kostendeckel/Rate-Limit in v1 — Kosten sind vernachlässigbar für eine Familien-App mit gelegentlichen Uploads.

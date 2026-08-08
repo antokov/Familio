@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     allowed_origins: list[str] = ["http://localhost:3000"]
     upload_dir: str = "./uploads"
     max_upload_size_mb: int = 20
+    anthropic_api_key: str | None = None
+    anthropic_model: str = "claude-sonnet-5"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

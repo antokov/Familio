@@ -2,17 +2,49 @@ import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useDocuments } from '../hooks/useDocuments'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
+import { useEvents } from '../hooks/useEvents'
 import { DocumentItem } from '../components/DocumentItem/DocumentItem'
 import { DocumentUploadModal } from '../components/DocumentUploadModal/DocumentUploadModal'
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal/DocumentPreviewModal'
-import type { Document } from '../types/document'
+import { ExtractEventsModal } from '../components/ExtractEventsModal/ExtractEventsModal'
+import type { Document, ExtractedEventCandidate } from '../types/document'
 import styles from './DocumentsPage.module.css'
 
+interface ExtractionState {
+  docId: string
+  filename: string
+  candidates: ExtractedEventCandidate[]
+}
+
 export default function DocumentsPage() {
-  const { documents, loading, error, uploadDocument, reassignDocument, deleteDocument, downloadUrl, viewUrl } = useDocuments()
+  const { documents, loading, error, uploadDocument, reassignDocument, deleteDocument, downloadUrl, viewUrl, extractEvents } = useDocuments()
   const { members: familyMembers } = useFamilyMembers()
+  const { createEvent } = useEvents()
   const [modalOpen, setModalOpen] = useState(false)
   const [previewDoc, setPreviewDoc] = useState<Document | undefined>()
+  const [extractingId, setExtractingId] = useState<string | null>(null)
+  const [extraction, setExtraction] = useState<ExtractionState | null>(null)
+  const [extractionError, setExtractionError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  async function handleExtract(doc: Document) {
+    setExtractingId(doc.id)
+    setExtractionError(null)
+    setSuccessMessage(null)
+    const result = await extractEvents(doc.id)
+    setExtractingId(null)
+    if ('error' in result) {
+      setExtractionError(result.error)
+      return
+    }
+    setExtraction({ docId: doc.id, filename: doc.filename, candidates: result.events })
+  }
+
+  function handleExtractionDone(createdCount: number) {
+    setSuccessMessage(
+      createdCount === 1 ? '1 Termin wurde angelegt.' : `${createdCount} Termine wurden angelegt.`
+    )
+  }
 
   return (
     <div className={styles.page}>
@@ -25,6 +57,8 @@ export default function DocumentsPage() {
       </div>
 
       {error && <div className={styles.errorBanner}>{error}</div>}
+      {extractionError && <div className={styles.errorBanner}>{extractionError}</div>}
+      {successMessage && <div className={styles.successBanner}>{successMessage}</div>}
 
       {loading && <p className={styles.loadingText}>Lädt…</p>}
 
@@ -43,9 +77,11 @@ export default function DocumentsPage() {
               doc={doc}
               familyMembers={familyMembers}
               downloadUrl={downloadUrl(doc.id)}
+              extracting={extractingId === doc.id}
               onPreview={setPreviewDoc}
               onReassign={(id, familyMemberId) => void reassignDocument(id, familyMemberId)}
               onDelete={id => void deleteDocument(id)}
+              onExtractEvents={d => void handleExtract(d)}
             />
           ))}
         </ul>
@@ -65,6 +101,16 @@ export default function DocumentsPage() {
           viewUrl={viewUrl(previewDoc.id)}
           downloadUrl={downloadUrl(previewDoc.id)}
           onClose={() => setPreviewDoc(undefined)}
+        />
+      )}
+
+      {extraction && (
+        <ExtractEventsModal
+          filename={extraction.filename}
+          candidates={extraction.candidates}
+          createEvent={createEvent}
+          onDone={handleExtractionDone}
+          onClose={() => setExtraction(null)}
         />
       )}
     </div>

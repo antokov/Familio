@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { FileText, Eye, Download, Trash2 } from 'lucide-react'
+import { FileText, Eye, Download, Trash2, CalendarPlus, Loader2 } from 'lucide-react'
 import type { Document as FamilioDocument } from '../../types/document'
+import { isExtractable } from '../../types/document'
 import type { FamilyMember } from '../../types/family'
 import styles from './DocumentItem.module.css'
 
@@ -8,9 +9,11 @@ interface DocumentItemProps {
   doc: FamilioDocument
   familyMembers: FamilyMember[]
   downloadUrl: string
+  extracting: boolean
   onPreview: (doc: FamilioDocument) => void
   onReassign: (id: string, familyMemberId: string | null) => void
   onDelete: (id: string) => void
+  onExtractEvents: (doc: FamilioDocument) => void
 }
 
 function formatSize(bytes: number): string {
@@ -23,7 +26,16 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export function DocumentItem({ doc, familyMembers, downloadUrl, onPreview, onReassign, onDelete }: DocumentItemProps) {
+export function DocumentItem({
+  doc,
+  familyMembers,
+  downloadUrl,
+  extracting,
+  onPreview,
+  onReassign,
+  onDelete,
+  onExtractEvents,
+}: DocumentItemProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   function handleDeleteConfirm() {
@@ -61,6 +73,17 @@ export function DocumentItem({ doc, familyMembers, downloadUrl, onPreview, onRea
         </div>
       ) : (
         <div className={styles.actions}>
+          {isExtractable(doc.contentType) && (
+            <button
+              className={styles.actionBtn}
+              onClick={() => onExtractEvents(doc)}
+              disabled={extracting}
+              aria-label={`Termine aus ${doc.filename} extrahieren`}
+              title="Termine extrahieren"
+            >
+              {extracting ? <Loader2 size={15} className={styles.spin} /> : <CalendarPlus size={15} />}
+            </button>
+          )}
           <button
             className={styles.actionBtn}
             onClick={() => onPreview(doc)}

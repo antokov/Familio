@@ -17,3 +17,13 @@ class DocumentResponse(BaseModel):
     uploaded_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ExtractedEvent(BaseModel):
+    title: str
+    start_dt: datetime
+    end_dt: datetime
+
+
+class ExtractEventsResponse(BaseModel):
+    events: list[ExtractedEvent]

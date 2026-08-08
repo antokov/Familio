@@ -17,24 +17,27 @@ const members: FamilyMember[] = [
   { id: 'member-1', name: 'Anton', initials: 'A', color: '#5B6AF0', online: false, createdAt: '2024-01-01T00:00:00' },
 ]
 
-function renderDocumentItem(overrides: Partial<Document> = {}) {
+function renderDocumentItem(overrides: Partial<Document> = {}, extracting = false) {
   const doc = { ...baseDoc, ...overrides }
   const onReassign = vi.fn()
   const onDelete = vi.fn()
   const onPreview = vi.fn()
+  const onExtractEvents = vi.fn()
   render(
     <ul>
       <DocumentItem
         doc={doc}
         familyMembers={members}
         downloadUrl="http://api.test/api/documents/doc-1/download"
+        extracting={extracting}
         onPreview={onPreview}
         onReassign={onReassign}
         onDelete={onDelete}
+        onExtractEvents={onExtractEvents}
       />
     </ul>
   )
-  return { doc, onReassign, onDelete, onPreview }
+  return { doc, onReassign, onDelete, onPreview, onExtractEvents }
 }
 
 describe('DocumentItem — Render', () => {
@@ -95,6 +98,35 @@ describe('DocumentItem — Zuweisung ändern', () => {
     const { onReassign } = renderDocumentItem({ familyMemberId: 'member-1' })
     await user.selectOptions(screen.getByRole('combobox'), '')
     expect(onReassign).toHaveBeenCalledWith('doc-1', null)
+  })
+})
+
+describe('DocumentItem — Termine extrahieren', () => {
+  it('zeigt den Button bei einem PDF-Dokument', () => {
+    renderDocumentItem({ contentType: 'application/pdf' })
+    expect(screen.getByRole('button', { name: 'Termine aus impfausweis.pdf extrahieren' })).toBeInTheDocument()
+  })
+
+  it('zeigt den Button bei einem Bild-Dokument', () => {
+    renderDocumentItem({ contentType: 'image/jpeg' })
+    expect(screen.getByRole('button', { name: 'Termine aus impfausweis.pdf extrahieren' })).toBeInTheDocument()
+  })
+
+  it('zeigt den Button NICHT bei einem nicht unterstützten Dateityp', () => {
+    renderDocumentItem({ contentType: 'application/msword' })
+    expect(screen.queryByRole('button', { name: 'Termine aus impfausweis.pdf extrahieren' })).not.toBeInTheDocument()
+  })
+
+  it('ruft onExtractEvents mit dem Dokument auf', async () => {
+    const user = userEvent.setup()
+    const { onExtractEvents, doc } = renderDocumentItem({ contentType: 'application/pdf' })
+    await user.click(screen.getByRole('button', { name: 'Termine aus impfausweis.pdf extrahieren' }))
+    expect(onExtractEvents).toHaveBeenCalledWith(doc)
+  })
+
+  it('ist disabled während extracting=true', () => {
+    renderDocumentItem({ contentType: 'application/pdf' }, true)
+    expect(screen.getByRole('button', { name: 'Termine aus impfausweis.pdf extrahieren' })).toBeDisabled()
   })
 })
 

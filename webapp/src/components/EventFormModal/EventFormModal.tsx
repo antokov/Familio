@@ -14,12 +14,12 @@ interface EventFormModalProps {
   onClose: () => void
 }
 
-function extractDate(isoStr: string): string {
+export function extractDate(isoStr: string): string {
   const d = new Date(isoStr)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
-function extractTime(isoStr: string): string {
+export function extractTime(isoStr: string): string {
   const d = new Date(isoStr)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
