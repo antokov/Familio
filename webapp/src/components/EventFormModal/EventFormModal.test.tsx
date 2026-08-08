@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { EventFormModal } from './EventFormModal'
 import type { CalendarEvent } from '../../types/event'
 import type { FamilyMember } from '../../types/family'
@@ -11,18 +12,22 @@ const baseEvent: CalendarEvent = {
   startDt: '2024-01-15T10:30:00',
   endDt: '2024-01-15T11:45:00',
   attendees: [],
+  allDay: false,
   createdAt: '2024-01-01T00:00:00',
 }
 
 function renderModal(event?: CalendarEvent) {
-  return render(
+  const onSave = vi.fn().mockResolvedValue(true)
+  const onClose = vi.fn()
+  render(
     <EventFormModal
       editEvent={event}
       familyMembers={MOCK_FAMILY}
-      onSave={vi.fn().mockResolvedValue(true)}
-      onClose={vi.fn()}
+      onSave={onSave}
+      onClose={onClose}
     />
   )
+  return { onSave, onClose }
 }
 
 describe('EventFormModal — Edit-Modus Vorausfüllen', () => {
@@ -86,5 +91,59 @@ describe('EventFormModal — Neuer Termin (kein editEvent)', () => {
   it('füllt Startzeit mit 09:00 vor wenn kein initialTime übergeben', () => {
     renderModal()
     expect((screen.getByLabelText('Von') as HTMLInputElement).value).toBe('09:00')
+  })
+})
+
+describe('EventFormModal — Ganztägig', () => {
+  it('Checkbox ist bei neuem Termin standardmäßig nicht aktiviert', () => {
+    renderModal()
+    expect(screen.getByLabelText('Ganztägig')).not.toBeChecked()
+    expect(screen.getByLabelText('Von')).toBeInTheDocument()
+  })
+
+  it('blendet Zeit-Felder aus, wenn Ganztägig aktiviert wird', async () => {
+    const user = userEvent.setup()
+    renderModal()
+    await user.click(screen.getByLabelText('Ganztägig'))
+    expect(screen.queryByLabelText('Von')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Bis')).not.toBeInTheDocument()
+  })
+
+  it('Checkbox ist bei ganztägigem editEvent bereits aktiviert und Zeit-Felder ausgeblendet', () => {
+    renderModal({ ...baseEvent, allDay: true })
+    expect(screen.getByLabelText('Ganztägig')).toBeChecked()
+    expect(screen.queryByLabelText('Von')).not.toBeInTheDocument()
+  })
+
+  it('zeigt Zeit-Felder wieder, wenn Ganztägig bei bestehendem Termin deaktiviert wird', async () => {
+    const user = userEvent.setup()
+    renderModal({ ...baseEvent, allDay: true })
+    await user.click(screen.getByLabelText('Ganztägig'))
+    expect(screen.getByLabelText('Von')).toBeInTheDocument()
+    expect(screen.getByLabelText('Bis')).toBeInTheDocument()
+  })
+
+  it('speichert mit 00:00–23:59 und allDay:true, wenn Ganztägig aktiviert ist', async () => {
+    const user = userEvent.setup()
+    const { onSave } = renderModal()
+    await user.type(screen.getByLabelText('Titel *'), 'Geburtstag')
+    await user.click(screen.getByLabelText('Ganztägig'))
+    await user.click(screen.getByRole('button', { name: 'Erstellen' }))
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Geburtstag',
+        allDay: true,
+        startDt: expect.stringMatching(/T00:00:00$/),
+        endDt: expect.stringMatching(/T23:59:00$/),
+      })
+    )
+  })
+
+  it('Submit-Button ist bei Ganztägig unabhängig von Zeitwerten aktiv', async () => {
+    const user = userEvent.setup()
+    renderModal()
+    await user.type(screen.getByLabelText('Titel *'), 'Ferienbeginn')
+    await user.click(screen.getByLabelText('Ganztägig'))
+    expect(screen.getByRole('button', { name: 'Erstellen' })).not.toBeDisabled()
   })
 })

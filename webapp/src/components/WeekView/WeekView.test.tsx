@@ -1,4 +1,6 @@
-import { computeEventLayout } from './WeekView'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { computeEventLayout, WeekView } from './WeekView'
 import type { CalendarEvent } from '../../types/event'
 
 function makeEvent(id: string, startH: number, startM: number, endH: number, endM: number): CalendarEvent {
@@ -9,6 +11,7 @@ function makeEvent(id: string, startH: number, startM: number, endH: number, end
     startDt: `2024-01-15T${pad(startH)}:${pad(startM)}:00`,
     endDt:   `2024-01-15T${pad(endH)}:${pad(endM)}:00`,
     attendees: [],
+    allDay: false,
     createdAt: '2024-01-01T00:00:00',
   }
 }
@@ -104,5 +107,74 @@ describe('computeEventLayout', () => {
     expect(layout).toHaveLength(3)
     const ids = layout.map(l => l.ev.id).sort()
     expect(ids).toEqual(['a', 'b', 'c'])
+  })
+})
+
+function makeAllDayEvent(id: string, title: string): CalendarEvent {
+  return {
+    id,
+    title,
+    startDt: '2024-01-15T00:00:00',
+    endDt: '2024-01-15T23:59:00',
+    attendees: [],
+    allDay: true,
+    createdAt: '2024-01-01T00:00:00',
+  }
+}
+
+function renderWeekView(events: CalendarEvent[]) {
+  const onEventClick = vi.fn()
+  const onSlotClick = vi.fn()
+  render(
+    <WeekView
+      weekStart={new Date(2024, 0, 15)}
+      events={events}
+      today="2024-01-15"
+      onSlotClick={onSlotClick}
+      onEventClick={onEventClick}
+    />
+  )
+  return { onEventClick, onSlotClick }
+}
+
+describe('WeekView — Ganztägig-Zeile', () => {
+  it('zeigt keine Ganztägig-Zeile, wenn keine All-Day-Events vorhanden sind', () => {
+    renderWeekView([makeEvent('a', 9, 0, 10, 0)])
+    expect(screen.queryByText('Ganztägig')).not.toBeInTheDocument()
+  })
+
+  it('zeigt die Ganztägig-Zeile mit dem Termin-Titel, wenn ein All-Day-Event vorhanden ist', () => {
+    renderWeekView([makeAllDayEvent('a', 'Geburtstag Anton')])
+    expect(screen.getByText('Ganztägig')).toBeInTheDocument()
+    expect(screen.getByText('Geburtstag Anton')).toBeInTheDocument()
+  })
+
+  it('All-Day-Event erscheint nicht als zeitgebundener Block im Stunden-Raster', () => {
+    renderWeekView([makeAllDayEvent('a', 'Geburtstag Anton')])
+    expect(screen.queryByText('00:00 – 23:59')).not.toBeInTheDocument()
+  })
+
+  it('zeigt mehrere All-Day-Events desselben Tages nebeneinander', () => {
+    renderWeekView([makeAllDayEvent('a', 'Termin A'), makeAllDayEvent('b', 'Termin B')])
+    expect(screen.getByText('Termin A')).toBeInTheDocument()
+    expect(screen.getByText('Termin B')).toBeInTheDocument()
+  })
+
+  it('zeigt "+N weitere" wenn mehr als 2 All-Day-Events am selben Tag liegen', () => {
+    renderWeekView([
+      makeAllDayEvent('a', 'Termin A'),
+      makeAllDayEvent('b', 'Termin B'),
+      makeAllDayEvent('c', 'Termin C'),
+    ])
+    expect(screen.getByText('+1 weitere')).toBeInTheDocument()
+    expect(screen.queryByText('Termin C')).not.toBeInTheDocument()
+  })
+
+  it('ruft onEventClick auf, wenn ein All-Day-Pill angeklickt wird', async () => {
+    const user = userEvent.setup()
+    const ev = makeAllDayEvent('a', 'Geburtstag Anton')
+    const { onEventClick } = renderWeekView([ev])
+    await user.click(screen.getByText('Geburtstag Anton'))
+    expect(onEventClick).toHaveBeenCalledWith(ev)
   })
 })

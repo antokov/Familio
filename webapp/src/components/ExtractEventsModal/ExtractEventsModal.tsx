@@ -65,6 +65,7 @@ export function ExtractEventsModal({ filename, candidates, createEvent, onDone, 
         startDt: `${row.date}T${row.startTime}:00`,
         endDt: `${row.date}T${row.endTime}:00`,
         attendees: [],
+        allDay: false,
       })
       if (ok) created += 1
       setProgress(prev => (prev ? { ...prev, current: prev.current + 1 } : prev))

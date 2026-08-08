@@ -146,6 +146,36 @@ class TestUpdateEvent:
         assert resp.status_code == 422
 
 
+class TestAllDay:
+    async def test_default_all_day_is_false(self, client: AsyncClient):
+        event = await create_sample_event(client)
+        assert event["all_day"] is False
+
+    async def test_create_all_day_true(self, client: AsyncClient):
+        payload = {**SAMPLE_EVENT, "all_day": True}
+        resp = await client.post("/api/events", json=payload)
+        assert resp.status_code == 201
+        assert resp.json()["all_day"] is True
+
+    async def test_update_all_day_true(self, client: AsyncClient):
+        event = await create_sample_event(client)
+        resp = await client.put(f"/api/events/{event['id']}", json={"all_day": True})
+        assert resp.status_code == 200
+        assert resp.json()["all_day"] is True
+
+    async def test_update_without_all_day_leaves_it_unchanged(self, client: AsyncClient):
+        event = await create_sample_event(client, all_day=True)
+        resp = await client.put(f"/api/events/{event['id']}", json={"title": "Neuer Titel"})
+        assert resp.status_code == 200
+        assert resp.json()["all_day"] is True
+
+    async def test_update_all_day_false(self, client: AsyncClient):
+        event = await create_sample_event(client, all_day=True)
+        resp = await client.put(f"/api/events/{event['id']}", json={"all_day": False})
+        assert resp.status_code == 200
+        assert resp.json()["all_day"] is False
+
+
 class TestDeleteEvent:
     async def test_delete_existing(self, client: AsyncClient):
         event = await create_sample_event(client)

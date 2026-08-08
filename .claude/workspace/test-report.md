@@ -1,51 +1,50 @@
-# Test Report — Termine aus Dokument extrahieren
+# Test Report — Ganztägige Termine
 
 ## Acceptance Criteria Verification
 
 | AC | Beschreibung | Status | Nachweis |
 |---|---|---|---|
-| AC1 | Extraktion starten, Ladezustand während Request | ✅ PASS | `DocumentItem` zeigt Spinner via `extracting`-Prop (`DocumentItem.test.tsx`: "ist disabled während extracting=true"); `DocumentsPage.handleExtract` setzt `extractingId` vor/nach dem Call. |
-| AC2 | Review-Dialog vor jeder Persistenz, editierbar, ab-/anwählbar | ✅ PASS | `ExtractEventsModal` rendert alle Kandidaten mit editierbaren Feldern und vorausgewählten Checkboxen, ruft **keine** API bis Klick auf "Termine übernehmen" (`ExtractEventsModal.test.tsx`: "zeigt alle Vorschläge mit vorausgewählten Checkboxen", "Abwählen…reduziert die Auswahl-Anzahl"). Backend-Endpoint persistiert nichts (`test_document_extraction.py`: `TestExtractEventsEndpoint` prüft nur Response, keine DB-Assertion nötig, da kein Modell existiert). |
-| AC3 | Nur ausgewählte Termine werden über Events-API angelegt | ✅ PASS | `ExtractEventsModal.test.tsx`: "ruft createEvent für jeden ausgewählten Termin auf…", "legt abgewählte Termine nicht an" — verifiziert sequenzielle Calls nur für selektierte Zeilen. |
-| AC4 | Keine Termine gefunden → verständliche Meldung | ✅ PASS | `ExtractEventsModal.test.tsx`: "zeigt Hinweistext, wenn keine Termine gefunden wurden"; Backend: `test_no_events_found_returns_empty_list` liefert leere Liste, kein Fehler. |
-| AC5 | Fehlerfall (kein API-Key, Netzwerk, Rate-Limit, falsches Format) → Fehlermeldung, keine Termine | ✅ PASS | Backend: `test_missing_api_key_returns_503`, `test_unsupported_content_type_returns_415`, `test_service_error_is_mapped_to_http_response`, `test_refusal_raises_extraction_error` (Service-Ebene), `APIStatusError`/`APIConnectionError`-Mapping im Code (502) — kein expliziter Test für die reinen Anthropic-Exception-Pfade (siehe Coverage-Lücke unten). Frontend: `DocumentsPage.handleExtract` setzt `extractionError`, zeigt `errorBanner`, legt nichts an (kein Test dafür — siehe Coverage-Lücke). |
+| AC1 | Ganztägig aktivieren beim Anlegen → Zeit-Felder verschwinden | ✅ PASS | `EventFormModal.test.tsx`: "blendet Zeit-Felder aus, wenn Ganztägig aktiviert wird" |
+| AC2 | Darstellung im Kalender (Monat: Pill wie gehabt, Woche: eigene Ganztägig-Zeile statt Zeit-Block) | ✅ PASS | `WeekView.test.tsx`: "zeigt die Ganztägig-Zeile mit dem Termin-Titel…", "All-Day-Event erscheint nicht als zeitgebundener Block im Stunden-Raster"; `MonthView` unverändert (zeigt Pills bereits titelbasiert, kein Test nötig da keine Code-Änderung) |
+| AC3 | Bearbeiten eines ganztägigen Termins → Checkbox vorausgewählt, Zeit-Felder ausgeblendet | ✅ PASS | `EventFormModal.test.tsx`: "Checkbox ist bei ganztägigem editEvent bereits aktiviert und Zeit-Felder ausgeblendet" |
+| AC4 | Ganztägig deaktivieren → Zeit-Felder erscheinen wieder | ✅ PASS | `EventFormModal.test.tsx`: "zeigt Zeit-Felder wieder, wenn Ganztägig bei bestehendem Termin deaktiviert wird" |
+| AC5 | Mehrere ganztägige Termine am selben Tag in der Wochenansicht | ✅ PASS | `WeekView.test.tsx`: "zeigt mehrere All-Day-Events desselben Tages nebeneinander", "zeigt '+N weitere' wenn mehr als 2 All-Day-Events am selben Tag liegen" |
 
 ## Edge Cases Verification (aus analysis.md)
 
 | # | Edge Case | Status |
 |---|---|---|
-| 1 | Keine Termine erkannt | ✅ Getestet (Backend + Frontend) |
-| 2 | Sehr viele Termine (Scroll) | ⚠️ Nicht automatisiert getestet (CSS `overflow-y: auto` vorhanden, visuell nicht verifizierbar in Unit-Tests) |
-| 3 | Mehrseitiges Dokument / Upload-Limit | ✅ Bereits durch bestehende Upload-Größenprüfung abgedeckt (unverändert) |
-| 4 | Mehrdeutiges/fehlendes Jahr | ⚠️ Prompt-Anweisung vorhanden, aber nicht automatisiert testbar (hängt von echtem Modellverhalten ab — kein Unit-Test möglich ohne echten API-Call) |
-| 5 | Claude API nicht erreichbar/Timeout/Rate-Limit | ✅ Für `APIStatusError`/`APIConnectionError`-Mapping im Code vorhanden; direkter Unit-Test für diese beiden Exception-Pfade fehlt (siehe Coverage-Lücke) |
-| 6 | Doppelklick während Extraktion | ✅ Getestet — Button `disabled` bei `extracting=true` |
-| 7 | Terminüberschneidung | ✅ Bewusst nicht implementiert (Out of Scope) |
-| 8 | Ende vor Start im Review-Dialog | ✅ Getestet indirekt über `isRowValid`/Submit-disabled-Logik — expliziter Test fehlt (siehe Coverage-Lücke) |
-| 9 | Serverseitige Content-Type-Validierung (Umgehung der UI-Sperre) | ✅ Getestet (`test_unsupported_content_type_returns_415`, `test_unsupported_content_type_raises_415`) |
+| 1 | Ganztägig aktiviert, Datum geändert → nur Datum zählt, Zeit-States werden beim Submit überschrieben | ✅ Durch Code-Pfad sichergestellt (`handleSubmit` setzt `00:00`/`23:59` unabhängig vom Zeit-State); indirekt durch "speichert mit 00:00–23:59…"-Test abgedeckt |
+| 2 | Ganztägig deaktiviert → vorherige Zeit-Werte bleiben erhalten (kein Reset) | ✅ Getestet ("zeigt Zeit-Felder wieder…" prüft Wiedererscheinen; Werte bleiben durch unverändertes State-Handling erhalten, kein Reset-Code vorhanden) |
+| 3 | Mehrere All-Day-Termine am selben Tag → alle in der Zeile | ✅ Getestet |
+| 4 | Sehr viele All-Day-Termine (>2) → "+N weitere" | ✅ Getestet |
+| 5 | All-Day- und zeitgebundener Termin am selben Tag | ⚠️ Nicht explizit getestet — durch die Filterlogik (`eventsByDay` filtert `!allDay`, `allDayEventsByDay` filtert `allDay`) strukturell garantiert überschneidungsfrei, aber kein dedizierter Kombinations-Test |
+| 6 | `EventUpdate`: `all_day` optional aktualisierbar, `exclude_unset` funktioniert weiter | ✅ Getestet (Backend: `test_update_all_day_true`, `test_update_without_all_day_leaves_it_unchanged`, `test_update_all_day_false`) |
+| 7 | Bekanntes 500-Risiko ohne Alembic bei neuer Spalte auf bestehender DB | ℹ️ Nicht automatisiert testbar (betrifft nur bestehende lokale/Produktions-DB-Dateien, nicht die In-Memory-Test-DB) — dokumentiert in `impl-report.md`, bekanntes Muster aus FS-09 |
 
 ## New Tests Written
 
-**Backend** (`backend/tests/test_document_extraction.py`, 13 Tests):
-- `TestExtractEventsEndpoint` (5): Erfolgsfall, 404, Fehler-Mapping, fehlender API-Key → 503, nicht unterstützter Content-Type → 415.
-- `TestCombine` (3): Uhrzeiten übernommen, Ganztags-Fallback bei fehlender Zeit, Ganztags-Fallback bei Ende-vor-Start.
-- `TestExtractEventsService` (5): Response-Parsing inkl. Ganztags-Mix, leere Liste, `refusal` → 502, fehlender API-Key → 503, nicht unterstützter Content-Type → 415 (jeweils gegen echten `extract_events()` mit gemocktem Anthropic-Client, kein echter Netzwerk-Call).
+**Backend** (`backend/tests/test_events.py`, +5 Tests in `TestAllDay`):
+- Default `all_day=False` bei neuem Termin.
+- Erstellen mit `all_day=True`.
+- Update setzt `all_day=True`.
+- Update ohne `all_day`-Feld lässt bestehenden Wert unverändert (`exclude_unset`).
+- Update setzt `all_day=False` zurück.
 
 **Frontend:**
-- `DocumentItem.test.tsx` (+5 Tests): Button-Sichtbarkeit bei PDF/Bild, Button-Ausblendung bei nicht unterstütztem Typ, `onExtractEvents`-Aufruf, `disabled` während Extraktion.
-- `ExtractEventsModal.test.tsx` (neu, 8 Tests): Leerer Zustand, Anzeige der Vorschläge, Auswahl-Zähler, Ab-/Anwahl, sequenzielles Anlegen nur ausgewählter Termine, `onDone`/`onClose`-Aufruf, Submit-Button disabled bei 0 Auswahl.
+- `EventFormModal.test.tsx` (+6 Tests, neuer Block "Ganztägig"): Default unchecked, Zeit-Felder verschwinden bei Aktivierung, Checkbox vorausgewählt + Felder ausgeblendet bei ganztägigem `editEvent`, Felder erscheinen wieder bei Deaktivierung, korrekter `onSave`-Payload (00:00/23:59 + `allDay:true`), Submit-Button unabhängig von Zeitwerten aktiv.
+- `WeekView.test.tsx` (+6 Tests, neuer Block "Ganztägig-Zeile"): Zeile nicht sichtbar ohne All-Day-Events, Zeile mit Titel sichtbar, kein Zeit-Text im Stunden-Raster für All-Day-Events, mehrere Termine nebeneinander, "+N weitere"-Begrenzung, Klick auf Pill ruft `onEventClick` auf.
 
 ## Coverage Gaps
 
-1. Kein Test für den `APIStatusError`/`APIConnectionError`-Exception-Pfad in `document_extraction.py` selbst (nur der generische `DocumentExtractionError`-Mapping-Pfad im Router ist getestet). Grund: Mocken der exakten `anthropic`-Exception-Konstruktoren ist nicht trivial ohne echte Response-Objekte der SDK. → TD-Kandidat.
-2. Kein Test für `DocumentsPage.tsx`s `handleExtract`/Fehlerbanner-Verdrahtung selbst (nur die Bausteine `DocumentItem` und `ExtractEventsModal` sind isoliert getestet) — Seiten-Test folgt bestehendem Muster fehlender Page-Tests (vgl. TD-13 im Backlog für andere Dokumente-Page-Teile).
-3. Keine Tests für "sehr viele Termine"/Scroll-Verhalten (visuell, nicht sinnvoll unit-testbar).
-4. Keine Tests für mehrdeutige Jahresangaben (hängt von echtem KI-Modellverhalten ab, nicht deterministisch unit-testbar).
+1. Keine dedizierte Kombination "All-Day- und zeitgebundener Termin am selben Tag gleichzeitig sichtbar" getestet (Edge Case 5) — strukturell durch die disjunkte Filterlogik abgesichert, aber kein expliziter Regressionstest.
+2. Keine E2E-/visuelle Prüfung, dass die Ganztägig-Zeile bei sehr vielen Terminen (>2) korrekt umbricht statt abzuschneiden — nur die "+N weitere"-Logik ist getestet, nicht das visuelle Layout.
+3. `useEvents.ts`-Hook selbst hat weiterhin keine eigenen Tests (bestehendes TD, siehe Backlog TD-08/FS-17-Familie) — die `all_day`-Erweiterung dort ist nur indirekt über die Component-Tests abgedeckt.
 
 ## Full Suite Results
 
-- Backend: **111/111 Tests grün** (`py -m pytest`), inkl. 13 neuer Tests.
-- Frontend: **141/141 Tests grün** (`npx vitest run`), inkl. 13 neuer Tests.
+- Backend: **116/116 Tests grün** (`py -m pytest`), inkl. 5 neuer Tests.
+- Frontend: **153/153 Tests grün** (`npx vitest run`), inkl. 12 neuer Tests.
 - TypeScript: `npx tsc --noEmit` — keine Fehler.
 
 ## Verdict
@@ -53,7 +52,6 @@
 **PASS ✅**
 
 Alle 5 Acceptance Criteria sind durch automatisierte Tests abgedeckt und grün. Die
-identifizierten Coverage-Gaps betreffen Rand-Pfade (spezifische Anthropic-SDK-Exceptions,
-Seiten-Verdrahtung, KI-Modellverhalten bei Mehrdeutigkeit) und Verhalten, das ohne echten
-API-Call bzw. visuell nicht sinnvoll automatisiert testbar ist — kein AC ist davon betroffen.
-Als Tech-Debt-Item ins Backlog aufgenommen (siehe Architect-Review).
+identifizierten Coverage-Gaps betreffen einen strukturell bereits abgesicherten Kombinations-
+Fall und rein visuelles Verhalten, das ohne Browser-Rendering nicht sinnvoll unit-testbar ist —
+kein AC ist davon betroffen.

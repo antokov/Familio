@@ -1,41 +1,38 @@
-# User Story — Termine aus Dokument extrahieren
+# User Story — Ganztägige Termine
 
 **As a** Familienmitglied
-**I want** aus einem bereits hochgeladenen Dokument (z. B. Kita-/Schul-Quartalsplan als PDF oder Foto) automatisiert Terminvorschläge generieren lassen, die ich vor der Übernahme prüfen und bearbeiten kann
-**So that** ich nicht jeden Termin einzeln manuell in den Kalender eintragen muss
+**I want** beim Erstellen/Bearbeiten eines Termins eine Option "Ganztägig" wählen können
+**So that** ich für Termine ohne konkrete Uhrzeit (Geburtstage, Ferien, Feiertage) keine künstliche Uhrzeit eintragen muss
 
 ## Acceptance Criteria
 
-**AC1 — Extraktion starten**
-Given ein PDF- oder Bild-Dokument ist bereits in der Dokumente-Liste hochgeladen,
-When ich auf "Termine extrahieren" klicke,
-Then wird das Dokument an die Claude API geschickt und die App zeigt einen Ladezustand, während die Extraktion läuft.
+**AC1 — Ganztägig aktivieren beim Anlegen**
+Given ich lege einen neuen Termin an,
+When ich die Checkbox "Ganztägig" aktiviere,
+Then verschwinden die Uhrzeit-Felder (Von/Bis) und nur das Datum bleibt editierbar.
 
-**AC2 — Review vor Übernahme (Pflicht-Schritt)**
-Given die Extraktion war erfolgreich,
-When das Ergebnis zurückkommt,
-Then zeigt die App einen Review-Dialog mit allen erkannten Terminvorschlägen (Titel, Datum, Start-/Endzeit), jeder Vorschlag ist editierbar und einzeln ab-/anwählbar — es wird noch NICHTS gespeichert.
+**AC2 — Darstellung im Kalender**
+Given ich habe "Ganztägig" aktiviert und speichere,
+When der Termin angelegt wird,
+Then wird er ohne Uhrzeit dargestellt — in der Monatsansicht wie gehabt als Pill, in der Wochenansicht in einer eigenen "Ganztägig"-Zeile oberhalb des Stunden-Rasters, nicht als zeitgebundener Block darin.
 
-**AC3 — Termine übernehmen**
-Given ich habe die Vorschläge im Review-Dialog geprüft,
-When ich auf "Termine übernehmen" klicke,
-Then werden nur die ausgewählten Termine als echte Kalendereinträge über die bestehende Events-API angelegt, und ich sehe eine Bestätigung (z. B. "3 Termine angelegt").
+**AC3 — Bearbeiten eines ganztägigen Termins**
+Given ich bearbeite einen bestehenden ganztägigen Termin,
+When ich das Bearbeiten-Modal öffne,
+Then ist die Checkbox "Ganztägig" bereits aktiviert und die Uhrzeit-Felder sind ausgeblendet.
 
-**AC4 — Keine Termine gefunden**
-Given das Dokument enthält keine erkennbaren Termine,
-When die Extraktion abgeschlossen ist,
-Then zeigt die App eine verständliche Meldung ("Keine Termine im Dokument gefunden") statt eines leeren oder kaputten Dialogs.
+**AC4 — Ganztägig deaktivieren**
+Given ich deaktiviere "Ganztägig" bei einem Termin (neu oder bestehend),
+When ich die Checkbox abwähle,
+Then erscheinen wieder Uhrzeit-Felder mit sinnvollen Standardwerten, die ich vor dem Speichern anpassen kann.
 
-**AC5 — Fehlerfall**
-Given die Claude-API meldet einen Fehler (kein API-Key konfiguriert, Netzwerkfehler, Rate-Limit, nicht unterstütztes Dateiformat),
-When das passiert,
-Then zeigt die App eine verständliche Fehlermeldung und legt keine Termine an.
+**AC5 — Mehrere ganztägige Termine am selben Tag**
+Given mehrere ganztägige Termine liegen am selben Tag,
+When ich die Wochenansicht öffne,
+Then werden sie alle in der Ganztägig-Zeile für diesen Tag angezeigt, ohne den Stunden-Raster-Bereich zu verdecken oder zu überlappen.
 
 ## Out of Scope
 
-- Automatisches Anlegen von Terminen **ohne** Review-Schritt — der Review ist bewusst verpflichtend (Sicherheitsnetz gegen Fehlextraktion), kein "One-Click-Autocreate".
-- Extraktion aus Office-Formaten (.doc/.docx/.xls/.xlsx/.ppt/.pptx) — nur PDF und Bilder (JPEG/PNG/GIF/WebP) in v1. Diese Formate bleiben weiterhin normal hochladbar, nur der "Termine extrahieren"-Button ist dafür nicht verfügbar.
-- Erkennung/Anlage von wiederkehrenden Terminen — jeder erkannte Termin wird als einzelner, nicht-wiederkehrender Termin angelegt.
-- Automatische Zuweisung an ein Familienmitglied im Review-Dialog — Zuweisung erfolgt bei Bedarf danach wie gewohnt über die Kalender-Bearbeitung.
-- Android-App — v1 ist Web-only, Android-Parität ist eine Folge-Story.
-- Konflikterkennung mit bestehenden Terminen im Kalender.
+- Mehrtägige, zusammenhängende ganztägige Termine (z. B. "Ferien 20.–31.07." als ein Balken über mehrere Tage) — v1 bleibt bei eintägigen ganztägigen Terminen, ein Termin pro Kalendertag.
+- Automatische Umstellung bestehender Termine mit einem 00:00–23:59-Zeitraum (z. B. aus der Dokumenten-Extraktion) auf `all_day=true` — bestehende Daten bleiben unverändert.
+- Datenbank-Migration via Alembic für die neue Spalte — folgt dem bestehenden, bekannten Muster (siehe Backlog FS-09), betrifft dieses Feature nicht anders als frühere Spalten-Änderungen.

@@ -10,6 +10,7 @@ export interface CalendarEvent {
   startDt: string
   endDt: string
   attendees: Attendee[]
+  allDay: boolean
   createdAt: string
 }
 
@@ -19,4 +20,5 @@ export interface CreateEventInput {
   startDt: string
   endDt: string
   attendees: Attendee[]
+  allDay: boolean
 }

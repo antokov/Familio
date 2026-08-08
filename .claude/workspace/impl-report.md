@@ -1,79 +1,66 @@
-# Implementation Report — Termine aus Dokument extrahieren
+# Implementation Report — Ganztägige Termine
 
 ## Approach
 
-Neuer Endpoint `POST /api/documents/{id}/extract-events` liest das bereits gespeicherte
-Dokument, schickt es (PDF als `document`-Block, Bild als `image`-Block, jeweils base64) an
-die Claude API und erzwingt via Structured Outputs (`output_config.format`, JSON-Schema) ein
-striktes Ergebnisformat. Die Antwort wird **nicht** persistiert — sie geht als Response an
-das Frontend, das sie in einem neuen Review-Dialog (`ExtractEventsModal`) anzeigt. Erst wenn
-der Nutzer dort explizit "Termine übernehmen" klickt, werden die ausgewählten Vorschläge
-sequenziell über den bereits bestehenden `POST /api/events`-Endpoint als echte Kalendertermine
-angelegt.
+Neues `all_day: boolean`-Feld (Default `false`) auf `CalendarEvent` — rein additiv, fließt
+über das bestehende `model_dump()`/`setattr`-Pattern automatisch durch `create_event`/
+`update_event`, **keine Router-Code-Änderung nötig**. `EventFormModal` bekommt eine
+"Ganztägig"-Checkbox: aktiviert blendet sie die Zeit-Row komplett aus dem DOM aus und setzt
+beim Speichern `startDt`/`endDt` hart auf `00:00`/`23:59` desselben Tages. `WeekView` filtert
+All-Day-Termine aus dem stunden-basierten Grid heraus und zeigt sie stattdessen in einer neuen,
+nur bei Bedarf sichtbaren "Ganztägig"-Zeile oberhalb des Stunden-Rasters (mit "+N weitere"-
+Begrenzung analog zu `MonthView`). `MonthView` blieb unverändert, da die Pill-Darstellung dort
+bereits unabhängig von der Uhrzeit funktioniert.
 
 ## Files Changed
 
 **Backend:**
-- `backend/requirements.txt` — `anthropic`-SDK ergänzt.
-- `backend/.env.example` — `ANTHROPIC_API_KEY` (optional) + `ANTHROPIC_MODEL` dokumentiert.
-- `backend/app/config.py` — `anthropic_api_key`, `anthropic_model` (Default `claude-sonnet-5`).
-- `backend/app/schemas/document.py` — `ExtractedEvent`, `ExtractEventsResponse` ergänzt.
-- `backend/app/services/__init__.py`, `backend/app/services/document_extraction.py` (neu) —
-  erstes Service-Modul der Codebasis; kapselt Claude-API-Aufruf, JSON-Schema, Prompt,
-  Datum/Uhrzeit-Zusammenbau (inkl. Ganztags-Fallback) und typisierte Fehler
-  (`DocumentExtractionError`).
-- `backend/app/routers/documents.py` — neuer Endpoint, nutzt bestehendes `_get_document_file()`.
+- `backend/app/models/event.py` — Spalte `all_day` (`Boolean`, `nullable=False`, `default=False`).
+- `backend/app/schemas/event.py` — `all_day` auf `EventCreate`/`EventUpdate`/`EventResponse`.
+- `backend/app/routers/events.py` — **unverändert** (generisches `model_dump()`-Pattern deckt das neue Feld bereits ab).
 
 **Frontend:**
-- `webapp/src/types/document.ts` — `ExtractedEventCandidate`, `isExtractable()`-Helper
-  (Content-Type-Whitelist: PDF, JPEG, PNG, GIF, WebP).
-- `webapp/src/hooks/useDocuments.ts` — `extractEvents(id)` ergänzt (gleiches
-  Error-Handling-Pattern wie `uploadDocument`/`reassignDocument`).
-- `webapp/src/components/EventFormModal/EventFormModal.tsx` — `extractDate`/`extractTime`
-  jetzt `export`, um Duplikation im neuen Review-Dialog zu vermeiden.
-- `webapp/src/components/ExtractEventsModal/ExtractEventsModal.tsx` + `.module.css` (neu) —
-  Review-Dialog: editierbare Titel/Datum/Zeit pro Vorschlag, Checkbox zum Ab-/Anwählen
-  (Default: alle ausgewählt), Fortschrittsanzeige beim sequenziellen Anlegen
-  (`"Übernehme … (2/5)"`).
-- `webapp/src/components/DocumentItem/DocumentItem.tsx` (+ `.module.css`) — neuer
-  Action-Button "Termine extrahieren" (nur bei extrahierbarem `contentType` sichtbar,
-  Spinner während Extraktion).
-- `webapp/src/components/DocumentItem/DocumentItem.test.tsx` — bestehende Test-Helper an die
-  zwei neuen Pflicht-Props (`extracting`, `onExtractEvents`) angepasst, damit Build/Tests
-  grün bleiben (neue Testfälle folgen im Tester-Report).
-- `webapp/src/pages/DocumentsPage.tsx` (+ `.module.css`) — State/Handler für Extraktion,
-  Erfolgs-/Fehler-Banner, Verdrahtung von `ExtractEventsModal` mit `useEvents().createEvent`.
+- `webapp/src/types/event.ts` — `allDay: boolean` auf `CalendarEvent`/`CreateEventInput`.
+- `webapp/src/hooks/useEvents.ts` — `toSnakeCase`/`fromApi` um `all_day`↔`allDay` erweitert.
+- `webapp/src/components/EventFormModal/EventFormModal.tsx` (+ `.module.css`) — Checkbox
+  "Ganztägig", bedingtes Ausblenden der Zeit-Row, harte 00:00/23:59-Werte beim Submit,
+  Validierung (`isValid`) übergeht die Zeit-Prüfung bei aktiviertem `allDay`.
+- `webapp/src/components/WeekView/WeekView.tsx` (+ `.module.css`) — neue All-Day-Zeile
+  (`allDayEventsByDay()`, `hasAllDayEvents`), `eventsByDay()` filtert jetzt `!ev.allDay`
+  heraus, sodass `computeEventLayout()` **unverändert** bleibt.
+- `webapp/src/components/ExtractEventsModal/ExtractEventsModal.tsx` — `allDay: false`
+  beim `createEvent()`-Aufruf ergänzt (Pflichtfeld-Kompatibilität; bewusst `false`, siehe
+  Assumptions).
+- `webapp/src/components/EventFormModal/EventFormModal.test.tsx`,
+  `webapp/src/components/WeekView/WeekView.test.tsx` — Test-Fixtures um `allDay: false`
+  ergänzt, damit bestehende Suiten kompilieren.
 
 ## Assumptions Made
 
-- Fehlt zu einem erkannten Termin eine Uhrzeit (oder ist sie ungültig/End vor Start), wird er
-  als ganztägig (00:00–23:59) behandelt statt eine Uhrzeit zu raten (Business Rule 6 aus
-  `analysis.md`).
-- Extrahierte Termine werden ohne `attendees` angelegt — Zuweisung erfolgt bei Bedarf danach
-  über die normale Kalender-Bearbeitung (Out of Scope laut Story).
-- Jeder erkannte Termin ist eintägig (ein `date`-Feld im Extraktions-Schema) — mehrtägige
-  Termine aus dem Dokument würden aktuell nur mit ihrem Start-Datum übernommen. Nicht
-  Teil der Story-Acceptance-Criteria, aber als Folge-Story-Kandidat vermerkt (siehe Backlog).
-- `id` der `ExtractedEventCandidate` im Frontend ist rein client-seitig (`candidate-{index}`,
-  React-Key) — die Backend-Response trägt keine ID, da nichts persistiert wird.
+- Extrahierte Termine aus der Dokumenten-Extraktion (`ExtractEventsModal`) werden weiterhin
+  mit `allDay: false` angelegt, auch wenn ihr Zeitraum 00:00–23:59 beträgt — keine automatische
+  Rückwirkung auf bestehende Logik (explizit Out of Scope laut Story).
+- Default-Zeiten beim Deaktivieren von "Ganztägig": die zuvor im State gehaltenen Werte bleiben
+  erhalten (kein Reset auf 09:00–10:00) — der Zeit-State wird beim Toggle nie verändert, nur
+  die Sichtbarkeit der Row. Bei einem neuen Termin ist der Ausgangswert ohnehin 09:00–10:00
+  (bestehender Default), bei einem bestehenden Termin die zuvor gespeicherte Zeit — das
+  entspricht dem in `analysis.md` angenommenen Verhalten, ohne einen zusätzlichen Reset-Effekt
+  einzuführen.
+- Lokale Dev-Datenbank (`backend/kovacevic.db`) wurde **nicht** automatisch gelöscht — das
+  bekannte 500-Risiko aus FS-09 besteht weiterhin für bestehende lokale/Produktions-DBs mit der
+  neuen Spalte, bis sie manuell neu erstellt oder migriert wird (siehe Backlog FS-09).
 
 ## Deviations from arch-decision.md
 
-Keine. Alle in `arch-decision.md` benannten Dateien wurden wie vorgesehen angefasst, keine
-zusätzlichen Dateien außerhalb der Liste geändert (Ausnahme: `DocumentItem.test.tsx` musste
-minimal angepasst werden, damit die bestehende Suite mit den zwei neuen Pflicht-Props weiter
-kompiliert — das war implizit in "Write or update unit tests alongside implementation"
-vorgesehen).
+Keine. Alle in `arch-decision.md` benannten Dateien wurden wie vorgesehen angefasst.
 
 ## Technical Debt / Follow-up
 
-- Keine Backend-Tests für `document_extraction.py` selbst in dieser Runde geschrieben (folgt
-  in Tester-Phase mit gemocktem Anthropic-Client).
-- Kein Test für den `ExtractEventsModal`-Komponenten-Flow (folgt in Tester-Phase).
-- Mehrtägige Termine im Quellendokument werden nur mit ihrem Startdatum übernommen (siehe
-  Assumptions) — als Folge-Story vermerken, falls in der Praxis relevant.
-- Android-Parität für dieses Feature fehlt noch (Out of Scope laut Story, aber wie bei
-  Dokumente/Vorschau bereits als Muster: Web zuerst, Android als Folge-Story).
+- `document_extraction.py` markiert Termine mit Ganztags-Zeitraum weiterhin nicht als
+  `all_day=true` — potenzielle Folge-Story, um beide Features zu verbinden (Extraktion könnte
+  `all_day` direkt setzen, statt nur den Zeitraum zu simulieren).
+- Keine Alembic-Migration für die neue Spalte (bewusst, siehe FS-09).
+- Android-Parität für "Ganztägig" fehlt (Web-only in v1, wie bei vorherigen Features).
 
 ## Open Items
 

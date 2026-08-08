@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -20,6 +20,7 @@ class CalendarEvent(Base):
     start_dt: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_dt: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     attendees: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    all_day: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

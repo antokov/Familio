@@ -42,6 +42,7 @@ export function EventFormModal({ editEvent, familyMembers, initialDate, initialT
   })
   const [description, setDescription] = useState(editEvent?.description ?? '')
   const [attendees, setAttendees] = useState<Attendee[]>(editEvent?.attendees ?? [])
+  const [allDay, setAllDay] = useState(editEvent?.allDay ?? false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(false)
 
@@ -63,16 +64,17 @@ export function EventFormModal({ editEvent, familyMembers, initialDate, initialT
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const trimmed = title.trim()
-    if (!trimmed || !isTimeValid()) return
+    if (!trimmed || (!allDay && !isTimeValid())) return
 
     setSaving(true)
     setSaveError(false)
     const ok = await onSave({
       title: trimmed,
       description: description.trim() || undefined,
-      startDt: `${date}T${startTime}:00`,
-      endDt: `${date}T${endTime}:00`,
+      startDt: allDay ? `${date}T00:00:00` : `${date}T${startTime}:00`,
+      endDt: allDay ? `${date}T23:59:00` : `${date}T${endTime}:00`,
       attendees,
+      allDay,
     })
     setSaving(false)
     if (ok) {
@@ -86,7 +88,7 @@ export function EventFormModal({ editEvent, familyMembers, initialDate, initialT
     if (e.target === e.currentTarget) onClose()
   }
 
-  const isValid = title.trim().length > 0 && isTimeValid()
+  const isValid = title.trim().length > 0 && (allDay || isTimeValid())
   const modalLabel = isEdit ? 'Termin bearbeiten' : 'Neuer Termin'
 
   return (
@@ -126,31 +128,44 @@ export function EventFormModal({ editEvent, familyMembers, initialDate, initialT
             />
           </div>
 
-          <div className={`${styles.field} ${styles.timeRow}`}>
-            <div>
-              <label htmlFor="event-start" className={styles.label}>Von</label>
-              <input
-                id="event-start"
-                type="time"
-                className={styles.input}
-                value={startTime}
-                onChange={e => setStartTime(e.target.value)}
-              />
-            </div>
-            <div>
-              <label htmlFor="event-end" className={styles.label}>Bis</label>
-              <input
-                id="event-end"
-                type="time"
-                className={`${styles.input} ${!isTimeValid() ? styles.inputError : ''}`}
-                value={endTime}
-                onChange={e => setEndTime(e.target.value)}
-              />
-              {!isTimeValid() && (
-                <span className={styles.timeErrorMsg}>Endzeit muss nach Startzeit liegen</span>
-              )}
-            </div>
+          <div className={`${styles.field} ${styles.checkboxRow}`}>
+            <input
+              id="event-allday"
+              type="checkbox"
+              className={styles.checkbox}
+              checked={allDay}
+              onChange={e => setAllDay(e.target.checked)}
+            />
+            <label htmlFor="event-allday" className={styles.checkboxLabel}>Ganztägig</label>
           </div>
+
+          {!allDay && (
+            <div className={`${styles.field} ${styles.timeRow}`}>
+              <div>
+                <label htmlFor="event-start" className={styles.label}>Von</label>
+                <input
+                  id="event-start"
+                  type="time"
+                  className={styles.input}
+                  value={startTime}
+                  onChange={e => setStartTime(e.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="event-end" className={styles.label}>Bis</label>
+                <input
+                  id="event-end"
+                  type="time"
+                  className={`${styles.input} ${!isTimeValid() ? styles.inputError : ''}`}
+                  value={endTime}
+                  onChange={e => setEndTime(e.target.value)}
+                />
+                {!isTimeValid() && (
+                  <span className={styles.timeErrorMsg}>Endzeit muss nach Startzeit liegen</span>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className={styles.field}>
             <span className={styles.label}>Teilnehmer</span>

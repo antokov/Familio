@@ -15,6 +15,7 @@ class EventCreate(BaseModel):
     start_dt: datetime
     end_dt: datetime
     attendees: list[AttendeeSchema] = Field(default_factory=list)
+    all_day: bool = False
 
     @model_validator(mode="after")
     def end_after_start(self) -> "EventCreate":
@@ -29,6 +30,7 @@ class EventUpdate(BaseModel):
     start_dt: Optional[datetime] = None
     end_dt: Optional[datetime] = None
     attendees: Optional[list[AttendeeSchema]] = None
+    all_day: Optional[bool] = None
 
 
 class EventResponse(BaseModel):
@@ -38,6 +40,7 @@ class EventResponse(BaseModel):
     start_dt: datetime
     end_dt: datetime
     attendees: list[AttendeeSchema]
+    all_day: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

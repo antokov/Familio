@@ -1,55 +1,48 @@
-# Architect Scoping — Termine aus Dokument extrahieren
+# Architect Scoping — Ganztägige Termine
 
 ## Codebase-Kontext
 
-- Router-Pattern: FastAPI-Router pro Feature (`app/routers/*.py`), DB-Zugriff **direkt im Router** via `AsyncSession` (kein bestehender Service-Layer trotz CLAUDE.md-Erwähnung — reale Codebasis hat aktuell keine `app/services/`-Dateien).
-- Diese Story führt **das erste echte Service-Modul** ein (`app/services/document_extraction.py`), weil die Claude-API-Interaktion (Prompt bauen, Client aufrufen, Response parsen) zu viel Logik für den Router ist. Kein Rückbau bestehender Router nötig — reine Ergänzung.
-- Events werden über `attendees: list[{initials, color}]` (JSON-Spalte) zugewiesen, nicht über `family_member_id`-FK wie bei Documents/Tasks.
-- `_get_document_file()` in `documents.py` existiert bereits und liefert `(Document, Path)` inkl. 404-Handling — wiederverwenden.
-- Frontend: API-Client ist kein zentraler Client, sondern pro Hook eigene `fetch`-Calls gegen `API_BASE` (siehe `useDocuments.ts`, `useEvents.ts`) — diesem Pattern folgen, keinen neuen "API-Layer" einführen.
-- `EventFormModal.tsx` hat bereits robuste `extractDate`/`extractTime`-Helper (TD-05, `new Date()` + lokale Accessoren) — für den Review-Dialog wiederverwenden statt neu zu bauen.
+- `CalendarEvent`-Backend-Modell (`backend/app/models/event.py`) ist bewusst schlank: `title`, `description`, `start_dt`, `end_dt`, `attendees` (JSON), `created_at`. Neues `all_day`-Feld fügt sich als weitere einfache Spalte ein.
+- `create_event`/`update_event` in `backend/app/routers/events.py` nutzen `data.model_dump()` bzw. `model_dump(exclude_unset=True)` und setzen die Felder generisch via `setattr`/Konstruktor — **kein Router-Code-Change nötig**, sobald das Schema erweitert ist.
+- Frontend-Datenfluss ist etabliert: `types/event.ts` (camelCase) → `useEvents.ts` (`toSnakeCase`/`fromApi`-Mapping) → `EventFormModal` (Formular-State) → `CalendarPage` (Verdrahtung, unverändert) → `MonthView`/`WeekView` (Darstellung).
+- `WeekView.computeEventLayout()` ist reine, exportierte, getestete Funktion (`WeekView.test.tsx`) — arbeitet nur mit zeitgebundenen Events. All-Day-Events müssen **vor** dem Aufruf herausgefiltert werden, nicht in der Funktion selbst behandelt werden (Funktion bleibt unverändert, keine Regression-Gefahr für bestehende Tests).
+- `MonthView.tsx` zeigt Pills rein titelbasiert — **keine Änderung nötig**.
+- Bekanntes Muster/Risiko: Neue DB-Spalte ohne Alembic (FS-09 offen) kann auf bestehender lokaler `backend/kovacevic.db` zu 500 führen, bis die Datei gelöscht wird (siehe Architecture-Log-Eintrag "Bugfix tasks 500"). Für automatisierte Tests irrelevant (In-Memory-SQLite pro Testlauf), aber Dev sollte lokale Verifikation ggf. nach Löschen der `kovacevic.db` durchführen.
 
 ## Dateien, die Dev anfassen soll
 
 **Backend:**
-1. `backend/requirements.txt` — Zeile `anthropic>=0.69.0` ergänzen (Sektion "Testing" bleibt unten).
-2. `backend/.env.example` — `ANTHROPIC_API_KEY` (auskommentiert, mit Hinweis "optional, für Termine-aus-Dokument-Feature") und `ANTHROPIC_MODEL=claude-sonnet-5` ergänzen.
-3. `backend/app/config.py` — zwei neue Felder auf `Settings`: `anthropic_api_key: str | None = None`, `anthropic_model: str = "claude-sonnet-5"`.
-4. `backend/app/schemas/document.py` — `ExtractedEvent`(title: str, start_dt: datetime, end_dt: datetime) und `ExtractEventsResponse`(events: list[ExtractedEvent]) ergänzen.
-5. **NEU:** `backend/app/services/__init__.py` (leer) + `backend/app/services/document_extraction.py`:
-   - `class DocumentExtractionError(Exception)` mit `.status_code: int` und `.detail: str` für saubere Fehler-Mapping im Router.
-   - `SUPPORTED_CONTENT_TYPES = {"application/pdf", "image/jpeg", "image/png", "image/gif", "image/webp"}`
-   - `async def extract_events(file_path: Path, content_type: str) -> list[ExtractedEvent]` — liest Datei, base64-encoded, baut Claude-Request, parsed Antwort.
-6. `backend/app/routers/documents.py` — neuer Endpoint `POST /{document_id}/extract-events`, response_model `ExtractEventsResponse`. Nutzt bestehendes `_get_document_file()`.
+1. `backend/app/models/event.py` — neue Spalte `all_day: Mapped[bool]` (`Boolean`, `nullable=False`, `default=False`).
+2. `backend/app/schemas/event.py` — `all_day` auf `EventCreate` (`bool = False`), `EventUpdate` (`Optional[bool] = None`), `EventResponse` (`bool`) ergänzen.
 
 **Frontend:**
-7. `webapp/src/types/document.ts` — `ExtractedEventCandidate` Interface ergänzen (id: string [client-generated für React-key], title, startDt, endDt).
-8. `webapp/src/hooks/useDocuments.ts` — `extractEvents(id: string): Promise<{ events: ExtractedEventCandidate[] } | { error: string }>` ergänzen.
-9. **NEU:** `webapp/src/components/ExtractEventsModal/ExtractEventsModal.tsx` + `.module.css` — Review-Dialog.
-10. `webapp/src/components/DocumentItem/DocumentItem.tsx` — neuer Action-Button "Termine extrahieren" (nur sichtbar bei unterstütztem `contentType`).
-11. `webapp/src/pages/DocumentsPage.tsx` — State + Handler zum Verdrahten von Extraktion → Review-Dialog → Termine anlegen (nutzt `useEvents().createEvent`).
+3. `webapp/src/types/event.ts` — `allDay: boolean` auf `CalendarEvent` und `CreateEventInput`.
+4. `webapp/src/hooks/useEvents.ts` — `toSnakeCase`/`fromApi` um `all_day`↔`allDay` erweitern.
+5. `webapp/src/components/EventFormModal/EventFormModal.tsx` (+ `.module.css`) — Checkbox "Ganztägig"; bei aktiviert: Zeit-Row (`.timeRow`) ausblenden, beim Submit `startDt`/`endDt` hart auf `00:00`/`23:59` setzen.
+6. `webapp/src/components/WeekView/WeekView.tsx` (+ `.module.css`) — neue "Ganztägig"-Zeile zwischen Header und Scroll-Bereich; `eventsByDay()` liefert weiterhin alle Events, aber vor `computeEventLayout()` nach `!ev.allDay` gefiltert; All-Day-Events separat pro Tag gesammelt und in der neuen Zeile gerendert.
+7. `webapp/src/components/WeekView/WeekView.test.tsx` — `makeEvent`-Helper um `allDay: false` ergänzen (sonst TS-Fehler durch neues Pflichtfeld), neue Testfälle für Filterung/Zeile.
+8. `webapp/src/components/EventFormModal/EventFormModal.test.tsx` — Testfälle für Checkbox-Verhalten ergänzen.
+
+**Kein Router-Code-Change** (`backend/app/routers/events.py` bleibt unverändert — siehe Codebase-Kontext).
 
 ## Patterns, die Dev befolgen MUSS
 
-- **Router bleibt dünn**: Die eigentliche Claude-API-Logik gehört in `services/document_extraction.py`, nicht in den Router. Router macht nur: Dokument laden, Content-Type validieren, Service aufrufen, Fehler mappen.
-- **Structured Outputs verwenden** (`output_config={"format": {"type": "json_schema", "schema": {...}}}`) für die Claude-Response — kein Prompting auf "gib mir JSON zurück" + manuelles Regex-Parsing. Modell: `settings.anthropic_model` (Default `claude-sonnet-5`), Client: `anthropic.AsyncAnthropic` (async, passend zu FastAPI).
-- **PDF/Bild als `document`/`image`-Content-Block** an die Messages API übergeben (base64), analog zur Doku im `python/claude-api/README.md` des `claude-api`-Skills — nicht die Datei als Text einlesen.
-- **Fehlerbehandlung**: `DocumentExtractionError` mit sprechendem `status_code` (503 wenn kein API-Key, 502 bei `anthropic.APIStatusError`/`APIConnectionError`, 415 bei nicht unterstütztem Content-Type) — Router fängt das und wirft `HTTPException(status_code=e.status_code, detail=e.detail)`.
-- **Keine Persistenz** der extrahierten Termine — `ExtractEventsResponse` ist eine reine Transport-Antwort, nichts wird in `calendar_events` geschrieben, bis der Nutzer im Frontend explizit "Termine übernehmen" klickt (das ruft den **bestehenden** `POST /api/events` auf, ein Request pro Termin).
-- **Frontend-Datenfluss**: `DocumentsPage` hält den State (`extracting`, `extractionCandidates`, `extractionError`), nicht `DocumentItem` (Item bleibt zustandslos wie bisher — vgl. `previewDoc`-Pattern in `DocumentsPage.tsx`).
-- **Zeit-Handling im Review-Dialog**: `extractDate`/`extractTime` aus `EventFormModal.tsx` wiederverwenden (kopieren als lokale Helper oder — bevorzugt — als benannte Funktionen aus `EventFormModal.tsx` exportieren und importieren, um Duplikation zu vermeiden).
-- **CSS**: Bestehende Modal-Struktur von `EventFormModal.module.css`/`DocumentUploadModal.module.css` als Vorlage nehmen (Backdrop, Card, Header mit X-Button) — keine neuen globalen Tokens nötig, siehe `design-decision.md`.
-- **Tests**: Backend-Tests für den neuen Endpoint mocken `app.services.document_extraction.extract_events` (monkeypatch, analog zum bestehenden `_use_tmp_upload_dir`-Fixture-Pattern in `test_documents.py`) — **keine echten API-Calls in Tests**.
+- **Backend-Schema treibt Verhalten**, keine Sonderfälle im Router — `all_day` ist einfach ein weiteres Feld in `EventCreate`/`EventUpdate`/`EventResponse`, genau wie `title`/`description`.
+- **`computeEventLayout()` bleibt unverändert** — All-Day-Filterung passiert im aufrufenden Code (`WeekView`-Komponente), nicht in der Layout-Funktion selbst. Bestehende `WeekView.test.tsx`-Tests für `computeEventLayout` dürfen nicht angepasst werden müssen (nur der `makeEvent`-Helper wegen des neuen Pflichtfelds).
+- **Checkbox blendet aus, disabled nicht** — analog zur Design-Entscheidung: Zeit-Row komplett aus dem DOM entfernen (`{!allDay && (...)}`), keine gegrauten disabled-Inputs (spart Platz, ist eindeutiger).
+- **Harte Zeit-Werte beim Submit, nicht beim Toggle** — `startTime`/`endTime`-States bleiben beim Umschalten unangetastet (falls Nutzer wieder deaktiviert, sind die vorherigen Werte noch da); erst `handleSubmit` überschreibt sie für den API-Call, wenn `allDay` aktiv ist.
+- **"+N weitere"-Pattern aus `MonthView` wiederverwenden** für die neue Ganztägig-Zeile in `WeekView` (Schwellwert 2 statt 3, siehe `analysis.md`).
+- **Keine neuen globalen Tokens** — Pill-Styling aus `MonthView.module.css` (`.pill`, `.moreLabel`) als Vorlage für die neuen `WeekView`-Klassen übernehmen (siehe `design-decision.md`).
+- **Tests:** Bestehende Testfälle (Backend `test_events.py`, Frontend `EventFormModal.test.tsx`/`WeekView.test.tsx`) dürfen nicht durch das neue Pflichtfeld brechen — `all_day` in Backend-Tests optional lassen (Default greift), `allDay` in Frontend-Test-Fixtures ergänzen.
 
 ## Explizite Constraints (was Dev NICHT tun soll)
 
-- Kein neues DB-Modell/keine neue Tabelle für Kandidaten-Termine.
-- Kein neuer Bulk-Create-Endpoint (`POST /api/events/bulk`) — sequenzielle Einzel-Calls im Frontend reichen für die erwarteten Mengen (typischerweise < 50 Termine pro Dokument).
-- Keine Attendee-Auswahl im Review-Dialog (siehe Story "Out of Scope").
-- Kein Hintergrund-Job/Queue/Polling — synchroner Request-Response reicht.
-- Keine Änderungen an `android/` — v1 ist Web-only.
-- Kein neuer globaler API-Client/Layer in `webapp/src/api/` — bestehendes Pro-Hook-`fetch`-Pattern beibehalten.
+- Keine Alembic-Migration einführen — das ist Scope von FS-09, nicht dieser Story.
+- Keine Änderung an `MonthView.tsx` — funktioniert bereits korrekt für ganztägige Termine.
+- Keine mehrtägigen All-Day-Termine (Balken über mehrere Tage) implementieren (Out of Scope laut Story).
+- Keine Änderungen an `android/` — Android-Parität ist wie bei vorherigen Features eine separate Folge-Story.
+- Keine Änderung an `document_extraction.py` — die dortige 00:00–23:59-Fallback-Logik bleibt unverändert und setzt `all_day` NICHT automatisch (Out of Scope, siehe Story); das ist ein bewusster Cut, kein Bug.
 
 ## Blocker-Check
 
-Keine Architektur-Risiken, die eine menschliche Entscheidung erfordern — Service-Layer-Einführung ist eine additive, risikoarme Erweiterung, kein Umbau bestehender Strukturen.
+Keine Architektur-Risiken, die eine menschliche Entscheidung erfordern. Additive Spalte, additive UI-Erweiterung, keine bestehende Struktur wird umgebaut.

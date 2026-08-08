@@ -1,41 +1,37 @@
-# BA Analysis — Termine aus Dokument extrahieren
+# BA Analysis — Ganztägige Termine
 
 ## Business Rules
 
-1. Der "Termine extrahieren"-Button ist nur für Dokumente mit `content_type` `application/pdf` oder `image/{jpeg,png,gif,webp}` sichtbar/aktiv. Für alle anderen Typen (Office, txt, heic, zip) ist er nicht verfügbar.
-2. Die Extraktion läuft synchron im Request-Response-Zyklus (kein Background-Job/Queue) — bei wenigen Seiten dauert das wenige Sekunden, ein Ladezustand im UI reicht.
-3. Das Extraktionsergebnis wird **nicht** in der Datenbank gespeichert. Es gibt kein neues "candidate events"-Modell — die Vorschläge leben nur im Frontend-State, bis der Nutzer im Review-Dialog bestätigt.
-4. Jeder vom Nutzer bestätigte Vorschlag wird über den bereits bestehenden `POST /api/events`-Endpoint angelegt (sequenziell, ein Request pro Termin) — kein neuer Bulk-Create-Endpoint nötig.
-5. Die KI muss Datum/Uhrzeit im ISO-8601-Format liefern, damit das Ergebnis direkt mit dem bestehenden `EventCreate`-Schema kompatibel ist. Das wird über Structured Outputs (`output_config.format` mit JSON-Schema) erzwungen — kein Freitext-Parsing per Regex.
-6. Fehlt im Dokument eine Uhrzeit zu einem Termin, wird er als ganztägig behandelt (Start `00:00`, Ende `23:59` desselben Tages als Default) — im Review-Dialog vom Nutzer korrigierbar.
-7. `ANTHROPIC_API_KEY` ist ein neues, optionales Environment-Secret. Ist es nicht gesetzt, liefert der Endpoint einen klaren Fehler (503) statt eines Crashs.
-8. Kosten pro Extraktion liegen im niedrigen Cent-Bereich (Modell: Sonnet 5) — kein Rate-Limiting/Kostendeckel in v1 nötig.
+1. Ein Termin bekommt ein neues Feld `all_day: boolean` (Default `false`) — rein additiv, keine bestehenden Daten werden reinterpretiert.
+2. Bei `all_day=true` werden `start_dt`/`end_dt` weiterhin gespeichert (00:00:00–23:59:00 desselben Tages, analog zum bereits etablierten Ganztags-Fallback in `document_extraction.py`) — die bestehende Backend-Validierung `end_dt > start_dt` bleibt unverändert gültig, keine Sonderlogik nötig.
+3. Die "Ganztägig"-Checkbox im `EventFormModal` steuert nur die UI (Zeit-Felder ein-/ausblenden). Beim Speichern mit aktivierter Checkbox werden Start-/Endzeit clientseitig hart auf `00:00`/`23:59` gesetzt — unabhängig vom (jetzt ausgeblendeten) Zeit-Feld-State.
+4. In der Wochenansicht werden Termine mit `allDay=true` aus dem stunden-basierten Grid-Layout (`computeEventLayout`) ausgeschlossen und stattdessen in einer neuen, separaten Zeile oberhalb des Stunden-Rasters dargestellt.
+5. In der Monatsansicht ist keine Änderung nötig — die Pills zeigen ausschließlich den Titel, unabhängig von Uhrzeit oder `all_day`-Status.
+6. Bestehende Termine ohne das neue Feld gelten als `all_day=false` (DB-Default) — keine rückwirkende Neuinterpretation vorhandener 00:00–23:59-Termine (z. B. aus der Dokumenten-Extraktion).
 
 ## Edge Cases
 
-1. **Keine Termine erkannt** → API liefert leere `events`-Liste, Frontend zeigt "Keine Termine gefunden" statt leerem Dialog.
-2. **Sehr viele Termine** (> 50) → Review-Liste muss scrollbar sein; kein Hard-Limit in v1. Output ist durch `max_tokens` des Modells begrenzt (Truncation-Risiko bei extrem langen Dokumenten — akzeptiertes Risiko für v1).
-3. **Mehrseitiges Dokument** → App-seitiges Upload-Limit von 20 MB ist der praktische Deckel; Sonnet 5 hat 1M-Context-Fenster, das reicht für typische Quartalspläne locker.
-4. **Mehrdeutiges/fehlendes Jahr** im Dokument (z. B. "15. März" ohne Jahreszahl) → Prompt muss die KI explizit anweisen, das Jahr aus dem Dokumentkontext (Deckblatt, Zeitraum-Angabe) abzuleiten, notfalls aktuelles/nächstes plausibles Jahr zu wählen.
-5. **Claude API nicht erreichbar / Timeout / Rate-Limit / kein API-Key** → sauberer Fehler im UI, kein Absturz, keine Termine angelegt.
-6. **Doppelklick auf "Termine extrahieren"** → Button muss während laufendem Request disabled sein (kein Doppel-Call, keine doppelten Kosten).
-7. **Überschneidung mit bestehendem Kalendertermin** → keine automatische Konflikterkennung in v1 (Termine werden wie bei manueller Eingabe einfach angelegt).
-8. **Nutzer bearbeitet Vorschlag im Review-Dialog, Ende liegt vor Start** → gleiche Validierungslogik wie im bestehenden `EventFormModal` (Start < Ende).
-9. **Nicht unterstützter Dateityp wird trotzdem angefragt** (z. B. manipulierter Request) → Backend validiert `content_type` serverseitig zusätzlich zur UI-Sperre (415 Unsupported Media Type).
+1. Nutzer aktiviert "Ganztägig", ändert danach das Datum → beim Speichern zählt nur `date`, die (ausgeblendeten) Zeit-States werden ignoriert und mit 00:00/23:59 überschrieben.
+2. Nutzer deaktiviert "Ganztägig" bei einem Termin → Zeit-Felder erscheinen wieder mit Default `09:00–10:00` (gleicher Default wie bei "Neuer Termin" ohne `initialTime`-Prop) statt der technischen 00:00/23:59-Werte — 00:00–23:59 wäre ein schlechter UX-Default für einen echten Zeittermin.
+3. Mehrere ganztägige Termine am selben Tag in der Wochenansicht → Zeile muss mehrere Pills darstellen, nicht nur den ersten.
+4. Sehr viele ganztägige Termine an einem Tag (selten) → analog zum bestehenden "+N weitere"-Muster aus `MonthView` begrenzen, damit die Zeile nicht unbegrenzt wächst (kompaktere Zeile als im Monat, daher niedrigerer Schwellwert: 2 sichtbar + "+N weitere").
+5. Ganztägiger Termin und zeitgebundener Termin am selben Tag → zeitgebundener Termin bleibt normal im Stunden-Raster, ganztägiger Termin erscheint zusätzlich in der neuen Zeile — keine Konfliktprüfung (konsistent mit bestehendem Verhalten ohne Konflikterkennung).
+6. `EventUpdate`-Schema: `all_day` muss wie andere Felder optional aktualisierbar sein (`exclude_unset`-Pattern bleibt unverändert funktionsfähig, da rein additiv).
+7. **Bekanntes, bereits dokumentiertes Risiko:** Ohne Alembic (offenes FS-09) führt eine neue Spalte auf einer bereits existierenden lokalen/Produktions-SQLite-DB zu 500-Fehlern, bis die DB-Datei manuell gelöscht/neu erstellt wird — exakt das gleiche Muster wie beim historischen `completed_at`-Vorfall (siehe Architecture Log "Bugfix tasks 500"). Kein neues Risiko, sondern bekanntes, in FS-09 verfolgtes Verhalten — wird im Impl-Report als Hinweis vermerkt, ist aber kein Blocker für dieses Feature.
 
 ## Data Model Implications
 
-- **Kein neues DB-Modell.** Die Extraktion ist ein reiner Analyse-Schritt, kein persistenter State.
-- **Neue Pydantic-Response-Schemas** (nicht DB-gebunden): `ExtractedEvent` (title, start_dt, end_dt) und `ExtractEventsResponse` (events: list[ExtractedEvent]).
-- **Neue Config-Werte** in `Settings`: `anthropic_api_key: str | None`, `anthropic_model: str` (Default `"claude-sonnet-5"`).
-- **Neue Dependency**: `anthropic`-Python-SDK in `requirements.txt`.
-- Bestehendes `CalendarEvent`-Modell/Schema bleibt unverändert — extrahierte Termine werden 1:1 über `EventCreate` (bestehend) angelegt, ganz ohne Attendees (leere Liste), analog zur manuellen Eingabe ohne Zuweisung.
+- **Backend:** `CalendarEvent`-Modell bekommt neue Spalte `all_day: Mapped[bool]` (SQLAlchemy `Boolean`, `nullable=False`, `default=False`).
+- **Backend-Schemas:** `EventCreate.all_day: bool = False`, `EventUpdate.all_day: Optional[bool] = None`, `EventResponse.all_day: bool`.
+- **Backend-Router:** Keine Code-Änderung nötig — `create_event`/`update_event` verwenden bereits `data.model_dump()`/`model_dump(exclude_unset=True)`, das neue Feld fließt automatisch durch.
+- **Frontend-Types:** `CalendarEvent.allDay: boolean`, `CreateEventInput.allDay: boolean` (camelCase, konsistent mit restlichem Pattern).
+- **Frontend-Hook:** `useEvents.ts`s `toSnakeCase`/`fromApi` um `all_day`/`allDay` erweitert (gleiches Pattern wie bestehende Felder).
 
 ## Open Questions
 
-**BLOCKING:** Keine. Die zentralen Entscheidungen (Review-Pflicht vor Anlage, unterstützte Formate, Modellwahl Sonnet 5, Default-Ganztags-Zeit bei fehlender Uhrzeit) wurden bereits im Vorgespräch mit dem Nutzer geklärt bzw. sind vertretbare, im Review-Schritt korrigierbare Standardannahmen für ein v1.
+**BLOCKING:** Keine.
 
 **NON-BLOCKING (Annahmen, dokumentiert):**
-- Default bei fehlender Uhrzeit: ganztägig (00:00–23:59), nicht z. B. "09:00–10:00" — nachvollziehbarer für Nutzer, im Review korrigierbar.
-- Keine Attendee-Zuweisung im Review-Dialog — hält v1 schlank, passt zum "Out of Scope" der Story.
-- Kein Kostendeckel/Rate-Limit in v1 — Kosten sind vernachlässigbar für eine Familien-App mit gelegentlichen Uploads.
+- Default-Zeiten beim Deaktivieren von "Ganztägig": `09:00–10:00` (Standard-Neu-Termin-Default), nicht die technischen Ganztags-Werte.
+- Mehrtägige ganztägige Termine explizit Out of Scope — keine Entscheidung in v1 nötig.
+- "+N weitere"-Schwellwert in der Wochenansicht-Ganztägig-Zeile: 2 sichtbar (statt 3 wie im Monat), da die Zeile kompakter ist als eine Monats-Zelle.

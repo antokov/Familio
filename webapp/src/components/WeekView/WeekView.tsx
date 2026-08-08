@@ -6,6 +6,7 @@ const HOUR_PX = 60
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 const GAP_PX = 3
+const MAX_ALLDAY_VISIBLE = 2
 
 export interface LayoutInfo {
   ev: CalendarEvent
@@ -116,8 +117,15 @@ export function WeekView({ weekStart, events, today, onSlotClick, onEventClick }
 
   function eventsByDay(day: Date): CalendarEvent[] {
     const dateStr = toLocalDateStr(day)
-    return events.filter(ev => ev.startDt.slice(0, 10) === dateStr)
+    return events.filter(ev => ev.startDt.slice(0, 10) === dateStr && !ev.allDay)
   }
+
+  function allDayEventsByDay(day: Date): CalendarEvent[] {
+    const dateStr = toLocalDateStr(day)
+    return events.filter(ev => ev.startDt.slice(0, 10) === dateStr && ev.allDay)
+  }
+
+  const hasAllDayEvents = events.some(ev => ev.allDay)
 
   const now = new Date()
   const todayWeekIndex = weekDays.findIndex(d => toLocalDateStr(d) === today)
@@ -141,6 +149,38 @@ export function WeekView({ weekStart, events, today, onSlotClick, onEventClick }
           )
         })}
       </div>
+
+      {/* All-day row */}
+      {hasAllDayEvents && (
+        <div className={styles.allDayRow}>
+          <div className={styles.allDayGutter}>Ganztägig</div>
+          {weekDays.map(day => {
+            const dateStr = toLocalDateStr(day)
+            const dayAllDayEvents = allDayEventsByDay(day)
+            const visible = dayAllDayEvents.slice(0, MAX_ALLDAY_VISIBLE)
+            const hiddenCount = dayAllDayEvents.length - visible.length
+
+            return (
+              <div key={dateStr} className={styles.allDayCell}>
+                {visible.map(ev => (
+                  <div
+                    key={ev.id}
+                    className={styles.allDayPill}
+                    style={{ backgroundColor: eventColor(ev) }}
+                    title={ev.title}
+                    onClick={() => onEventClick(ev)}
+                  >
+                    {ev.title}
+                  </div>
+                ))}
+                {hiddenCount > 0 && (
+                  <div className={styles.allDayMore}>+{hiddenCount} weitere</div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Scrollable body */}
       <div ref={scrollRef} className={styles.scrollArea}>

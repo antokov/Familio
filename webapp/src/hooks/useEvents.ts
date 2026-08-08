@@ -9,6 +9,7 @@ function toSnakeCase(input: Partial<CreateEventInput>): Record<string, unknown> 
   if (input.startDt !== undefined) result['start_dt'] = input.startDt
   if (input.endDt !== undefined) result['end_dt'] = input.endDt
   if (input.attendees !== undefined) result['attendees'] = input.attendees
+  if (input.allDay !== undefined) result['all_day'] = input.allDay
   return result
 }
 
@@ -20,6 +21,7 @@ function fromApi(raw: Record<string, unknown>): CalendarEvent {
     startDt: raw['start_dt'] as string,
     endDt: raw['end_dt'] as string,
     attendees: (raw['attendees'] as CalendarEvent['attendees']) ?? [],
+    allDay: (raw['all_day'] as boolean) ?? false,
     createdAt: raw['created_at'] as string,
   }
 }

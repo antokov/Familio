@@ -54,6 +54,56 @@
   color: var(--color-primary);
 }
 
+.allDayRow {
+  display: grid;
+  grid-template-columns: 48px repeat(7, 1fr);
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.allDayGutter {
+  width: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  padding: var(--space-1);
+  box-sizing: border-box;
+}
+
+.allDayCell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-1) var(--space-2);
+  border-left: 1px solid var(--color-border);
+}
+
+.allDayPill {
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.allDayPill:hover {
+  opacity: 0.85;
+}
+
+.allDayMore {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  padding: 0 var(--space-1);
+}
+
 .scrollArea {
   overflow-y: auto;
   flex: 1;
