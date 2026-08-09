@@ -37,6 +37,17 @@ class TestListEvents:
         assert resp.status_code == 200
         assert resp.json() == []
 
+    async def test_includes_multi_day_event_spanning_into_range(self, client: AsyncClient):
+        await create_sample_event(
+            client,
+            start_dt="2025-07-30T00:00:00Z",
+            end_dt="2025-08-02T23:59:00Z",
+            all_day=True,
+        )
+        resp = await client.get("/api/events?from=2025-08-01&to=2025-08-31")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
     async def test_missing_from_param_returns_422(self, client: AsyncClient):
         resp = await client.get("/api/events?to=2025-07-31")
         assert resp.status_code == 422

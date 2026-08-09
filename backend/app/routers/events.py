@@ -22,7 +22,7 @@ async def list_events(
 
     stmt = (
         select(CalendarEvent)
-        .where(CalendarEvent.start_dt >= from_dt)
+        .where(CalendarEvent.end_dt >= from_dt)
         .where(CalendarEvent.start_dt < to_dt)
         .order_by(CalendarEvent.start_dt)
     )
