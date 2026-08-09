@@ -23,6 +23,7 @@ data class EventWriteRequest(
     val startDt: String,
     val endDt: String,
     val attendees: List<Attendee> = emptyList(),
+    val allDay: Boolean = false,
 )
 
 @Serializable

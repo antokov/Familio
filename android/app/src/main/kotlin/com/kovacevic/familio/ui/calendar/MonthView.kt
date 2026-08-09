@@ -20,7 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kovacevic.familio.data.model.CalendarEvent
 import com.kovacevic.familio.ui.components.parseHexColor
-import com.kovacevic.familio.ui.parseApiDateTime
+import com.kovacevic.familio.ui.eventDateRange
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.format.TextStyle
@@ -41,7 +41,12 @@ fun MonthView(
     val firstOfMonth = LocalDate.of(year, month, 1)
     val gridStart = firstOfMonth.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
     val days = (0 until 42).map { gridStart.plusDays(it.toLong()) }
-    val eventsByDay = events.groupBy { parseApiDateTime(it.startDt).toLocalDate() }
+    val eventsByDay = mutableMapOf<LocalDate, MutableList<CalendarEvent>>()
+    events.forEach { event ->
+        for (day in eventDateRange(event)) {
+            eventsByDay.getOrPut(day) { mutableListOf() }.add(event)
+        }
+    }
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth()) {

@@ -2,6 +2,7 @@ package com.kovacevic.familio.ui.calendar
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,6 +28,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kovacevic.familio.data.model.CalendarEvent
 import com.kovacevic.familio.ui.components.parseHexColor
+import com.kovacevic.familio.ui.eventDateRange
 import com.kovacevic.familio.ui.parseApiDateTime
 import java.time.LocalDate
 import java.time.LocalTime
@@ -46,7 +48,15 @@ fun WeekView(
     modifier: Modifier = Modifier,
 ) {
     val days = (0 until 7).map { weekStart.plusDays(it.toLong()) }
-    val eventsByDay = events.groupBy { parseApiDateTime(it.startDt).toLocalDate() }
+    val timedEvents = events.filter { !it.allDay }
+    val allDayEvents = events.filter { it.allDay }
+    val eventsByDay = timedEvents.groupBy { parseApiDateTime(it.startDt).toLocalDate() }
+    val allDayEventsByDay = mutableMapOf<LocalDate, MutableList<CalendarEvent>>()
+    allDayEvents.forEach { event ->
+        for (day in eventDateRange(event)) {
+            allDayEventsByDay.getOrPut(day) { mutableListOf() }.add(event)
+        }
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth()) {
@@ -67,6 +77,40 @@ fun WeekView(
                         style = MaterialTheme.typography.titleMedium,
                         color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                     )
+                }
+            }
+        }
+        if (allDayEvents.isNotEmpty()) {
+            HorizontalDivider()
+            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                Text(
+                    "Ganztägig",
+                    modifier = Modifier.width(TIME_AXIS_WIDTH),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                days.forEach { day ->
+                    Column(
+                        modifier = Modifier.weight(1f).padding(horizontal = 1.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        allDayEventsByDay[day].orEmpty().forEach { event ->
+                            val color = event.attendees.firstOrNull()?.color?.let { parseHexColor(it) } ?: MaterialTheme.colorScheme.primary
+                            Text(
+                                event.title,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(3.dp))
+                                    .background(color.copy(alpha = 0.85f))
+                                    .clickable { onEventClick(event) }
+                                    .padding(horizontal = 3.dp, vertical = 1.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
         }

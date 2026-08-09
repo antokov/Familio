@@ -16,6 +16,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -25,6 +26,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
@@ -81,11 +83,12 @@ fun EventFormDialog(
                 ?: emptySet(),
         )
     }
+    var allDay by remember { mutableStateOf(editEvent?.allDay ?: false) }
     var pickerTarget by remember { mutableStateOf(PickerTarget.NONE) }
 
     val startDateTime = LocalDateTime.of(startDate, startTime)
     val endDateTime = LocalDateTime.of(endDate, endTime)
-    val isValid = title.isNotBlank() && endDateTime.isAfter(startDateTime)
+    val isValid = title.isNotBlank() && (if (allDay) !endDate.isBefore(startDate) else endDateTime.isAfter(startDateTime))
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -107,6 +110,21 @@ fun EventFormDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Ganztägig")
+                    Switch(
+                        checked = allDay,
+                        onCheckedChange = { checked ->
+                            allDay = checked
+                            if (checked && endDate.isBefore(startDate)) endDate = startDate
+                        },
+                    )
+                }
+
                 Text("Beginn", style = MaterialTheme.typography.labelSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PickerField(
@@ -114,11 +132,13 @@ fun EventFormDialog(
                         modifier = Modifier.weight(1f),
                         onClick = { pickerTarget = PickerTarget.START_DATE },
                     )
-                    PickerField(
-                        value = startTime.format(timeLabelFormatter),
-                        modifier = Modifier.weight(1f),
-                        onClick = { pickerTarget = PickerTarget.START_TIME },
-                    )
+                    if (!allDay) {
+                        PickerField(
+                            value = startTime.format(timeLabelFormatter),
+                            modifier = Modifier.weight(1f),
+                            onClick = { pickerTarget = PickerTarget.START_TIME },
+                        )
+                    }
                 }
 
                 Text("Ende", style = MaterialTheme.typography.labelSmall)
@@ -128,14 +148,18 @@ fun EventFormDialog(
                         modifier = Modifier.weight(1f),
                         onClick = { pickerTarget = PickerTarget.END_DATE },
                     )
-                    PickerField(
-                        value = endTime.format(timeLabelFormatter),
-                        modifier = Modifier.weight(1f),
-                        onClick = { pickerTarget = PickerTarget.END_TIME },
-                    )
+                    if (!allDay) {
+                        PickerField(
+                            value = endTime.format(timeLabelFormatter),
+                            modifier = Modifier.weight(1f),
+                            onClick = { pickerTarget = PickerTarget.END_TIME },
+                        )
+                    }
                 }
-                if (!endDateTime.isAfter(startDateTime)) {
-                    Text("Ende muss nach Beginn liegen", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
+                val rangeInvalid = if (allDay) endDate.isBefore(startDate) else !endDateTime.isAfter(startDateTime)
+                if (rangeInvalid) {
+                    val message = if (allDay) "Ende muss am oder nach dem Beginn liegen" else "Ende muss nach Beginn liegen"
+                    Text(message, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall)
                 }
 
                 if (familyMembers.isNotEmpty()) {
@@ -171,13 +195,16 @@ fun EventFormDialog(
                         val attendees = familyMembers
                             .filter { it.id in selectedMemberIds }
                             .map { Attendee(it.initials, it.color) }
+                        val effectiveStart = if (allDay) LocalDateTime.of(startDate, LocalTime.MIDNIGHT) else startDateTime
+                        val effectiveEnd = if (allDay) LocalDateTime.of(endDate, LocalTime.of(23, 59)) else endDateTime
                         onSave(
                             EventWriteRequest(
                                 title = title.trim(),
                                 description = description.trim().ifBlank { null },
-                                startDt = startDateTime.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
-                                endDt = endDateTime.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                                startDt = effectiveStart.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                                endDt = effectiveEnd.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                                 attendees = attendees,
+                                allDay = allDay,
                             ),
                         )
                     },

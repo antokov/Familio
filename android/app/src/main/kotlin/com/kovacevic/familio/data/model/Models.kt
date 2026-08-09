@@ -29,6 +29,7 @@ data class CalendarEvent(
     val startDt: String,
     val endDt: String,
     val attendees: List<Attendee> = emptyList(),
+    val allDay: Boolean = false,
     val createdAt: String = "",
 )
 

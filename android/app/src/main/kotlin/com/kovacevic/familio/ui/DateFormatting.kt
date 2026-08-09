@@ -1,5 +1,6 @@
 package com.kovacevic.familio.ui
 
+import com.kovacevic.familio.data.model.CalendarEvent
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -60,3 +61,12 @@ fun formatEventTime(startDt: String): String {
 
 fun isOverdue(dueDate: String?, today: String = todayIso()): Boolean =
     !dueDate.isNullOrBlank() && dueDate < today
+
+/** Every calendar day an event touches: just the start day for timed events, the full span for all-day events. */
+fun eventDateRange(event: CalendarEvent): List<LocalDate> {
+    val start = parseApiDateTime(event.startDt).toLocalDate()
+    if (!event.allDay) return listOf(start)
+    val end = parseApiDateTime(event.endDt).toLocalDate()
+    if (end < start) return listOf(start)
+    return (0..java.time.temporal.ChronoUnit.DAYS.between(start, end)).map { start.plusDays(it) }
+}
