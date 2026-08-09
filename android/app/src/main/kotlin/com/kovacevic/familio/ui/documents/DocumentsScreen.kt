@@ -1,9 +1,13 @@
 package com.kovacevic.familio.ui.documents
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import android.os.ParcelFileDescriptor
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +17,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,6 +31,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -35,6 +41,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,8 +50,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
@@ -57,7 +68,10 @@ import com.kovacevic.familio.di.familioContainer
 import com.kovacevic.familio.ui.components.AvatarBadge
 import com.kovacevic.familio.ui.components.AvatarSize
 import com.kovacevic.familio.ui.theme.FamilioTheme
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun DocumentsScreen(modifier: Modifier = Modifier) {
@@ -159,6 +173,7 @@ fun DocumentsScreen(modifier: Modifier = Modifier) {
         DocumentPreview(
             document = doc,
             container = container,
+            onLoadFile = { viewModel.downloadForPreview(doc) },
             onClose = { previewDoc = null },
             onOpenExternally = {
                 scope.launch {
@@ -269,13 +284,56 @@ private fun DocumentRow(
     }
 }
 
+private sealed interface PdfPreviewState {
+    data object Loading : PdfPreviewState
+    data class Error(val message: String) : PdfPreviewState
+    data class Loaded(val pages: List<ImageBitmap>) : PdfPreviewState
+}
+
+private suspend fun renderPdfPages(file: File, targetWidthPx: Int): List<Bitmap> = withContext(Dispatchers.IO) {
+    ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd ->
+        PdfRenderer(pfd).use { renderer ->
+            (0 until renderer.pageCount).map { index ->
+                renderer.openPage(index).use { page ->
+                    val scale = targetWidthPx.toFloat() / page.width
+                    val bitmap = Bitmap.createBitmap(targetWidthPx, (page.height * scale).toInt(), Bitmap.Config.ARGB_8888)
+                    bitmap.eraseColor(android.graphics.Color.WHITE)
+                    page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                    bitmap
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun DocumentPreview(
     document: Document,
     container: com.kovacevic.familio.di.AppContainer,
+    onLoadFile: suspend () -> File?,
     onClose: () -> Unit,
     onOpenExternally: () -> Unit,
 ) {
+    val density = LocalDensity.current
+    val pageWidthPx = with(density) { (LocalConfiguration.current.screenWidthDp.dp - 32.dp).roundToPx() }
+    var pdfState by remember(document.id) { mutableStateOf<PdfPreviewState>(PdfPreviewState.Loading) }
+
+    LaunchedEffect(document.id) {
+        if (document.contentType == "application/pdf") {
+            pdfState = PdfPreviewState.Loading
+            val file = onLoadFile()
+            pdfState = if (file == null) {
+                PdfPreviewState.Error("Datei konnte nicht geladen werden.")
+            } else {
+                try {
+                    PdfPreviewState.Loaded(renderPdfPages(file, pageWidthPx).map { it.asImageBitmap() })
+                } catch (e: Exception) {
+                    PdfPreviewState.Error("Vorschau konnte nicht erstellt werden.")
+                }
+            }
+        }
+    }
+
     Dialog(onDismissRequest = onClose) {
         Column(
             modifier = Modifier
@@ -290,20 +348,43 @@ private fun DocumentPreview(
                 Text(document.filename, style = MaterialTheme.typography.titleMedium, maxLines = 1)
                 IconButton(onClick = onClose) { Icon(Icons.Filled.Close, contentDescription = "Schließen") }
             }
-            if (document.contentType.startsWith("image/")) {
-                AsyncImage(
+            when {
+                document.contentType.startsWith("image/") -> AsyncImage(
                     model = container.documentRepository.placeholderViewUrl(document.id),
                     imageLoader = container.imageLoader,
                     contentDescription = document.filename,
                     modifier = Modifier.fillMaxWidth().aspectRatio(1f),
                 )
-            } else {
-                Text(
-                    "Für diesen Dateityp gibt es keine In-App-Vorschau.",
-                    modifier = Modifier.padding(vertical = 16.dp),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                TextButton(onClick = onOpenExternally) { Text("Mit anderer App öffnen") }
+                document.contentType == "application/pdf" -> when (val state = pdfState) {
+                    is PdfPreviewState.Loading -> Box(
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { CircularProgressIndicator() }
+                    is PdfPreviewState.Error -> Column {
+                        Text(state.message, modifier = Modifier.padding(vertical = 16.dp), style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = onOpenExternally) { Text("Mit anderer App öffnen") }
+                    }
+                    is PdfPreviewState.Loaded -> LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(state.pages) { page ->
+                            Image(
+                                bitmap = page,
+                                contentDescription = document.filename,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                    }
+                }
+                else -> Column {
+                    Text(
+                        "Für diesen Dateityp gibt es keine In-App-Vorschau.",
+                        modifier = Modifier.padding(vertical = 16.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TextButton(onClick = onOpenExternally) { Text("Mit anderer App öffnen") }
+                }
             }
         }
     }
