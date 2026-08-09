@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pencil, Trash2, Plus } from 'lucide-react'
+import { Pencil, Trash2, Plus, Smartphone, Download } from 'lucide-react'
 import { useOutletContext } from 'react-router-dom'
 import { ThemeToggle } from '../components/ThemeToggle/ThemeToggle'
 import { AvatarBadge } from '../components/AvatarBadge/AvatarBadge'
@@ -126,6 +126,27 @@ export default function SettingsPage() {
             <Plus size={16} />
             <span>Mitglied hinzufügen</span>
           </button>
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>App</h2>
+        <div className={styles.card}>
+          <div className={styles.settingRow}>
+            <div className={styles.appInfo}>
+              <span className={styles.appIconWrap}>
+                <Smartphone size={20} />
+              </span>
+              <div className={styles.settingInfo}>
+                <span className={styles.settingLabel}>Android-App</span>
+                <span className={styles.settingHint}>APK herunterladen und installieren</span>
+              </div>
+            </div>
+            <a className={styles.downloadBtn} href="/downloads/familio.apk" download>
+              <Download size={16} />
+              <span>Herunterladen</span>
+            </a>
+          </div>
         </div>
       </section>
 

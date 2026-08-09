@@ -1,50 +1,40 @@
-# Test Report — Mehrtägige Termine (Ferien etc.)
+# QA Test Report — Android-App-Download in den Einstellungen
 
 ## Acceptance Criteria Verification
 
-| AC | Beschreibung | Status | Nachweis |
-|---|---|---|---|
-| AC1 | Von/Bis-Datumsfelder statt "Datum" bei aktiviertem Ganztägig | ✅ PASS | `EventFormModal.test.tsx`: "ersetzt Zeit-Felder durch Von/Bis-Datumsfelder, wenn Ganztägig aktiviert wird" |
-| AC2 | Darstellung im Monat — Pill an jedem Tag im Zeitraum | ✅ PASS | `MonthView.test.tsx`: "zeigt einen 3-tägigen ganztägigen Termin an allen 3 Tagen" |
-| AC3 | Darstellung in der Woche — Ganztägig-Zeile an jedem betroffenen Tag | ✅ PASS | `WeekView.test.tsx`: "zeigt einen mehrtägigen All-Day-Termin an jedem betroffenen Tag der Woche", "zeigt den mehrtägigen Termin nicht an Tagen außerhalb seines Zeitraums" |
-| AC4 | Bearbeiten eines mehrtägigen Termins — Von/Bis korrekt vorausgefüllt | ✅ PASS | `EventFormModal.test.tsx`: "füllt Von/Bis bei mehrtägigem editEvent korrekt vor" |
-| AC5 | Ungültiger Zeitraum wird verhindert | ✅ PASS | `EventFormModal.test.tsx`: "deaktiviert Speichern-Button, wenn Bis vor Von liegt", "zieht Bis automatisch nach, wenn Von auf ein späteres Datum als Bis verschoben wird" |
+1. **Section "App" mit Download-Button sichtbar** → ✅ PASS. `SettingsPage.tsx` rendert eine dritte `<section>` "App" mit Titel "Android-App" und Button "Herunterladen" analog zu "Darstellung"/"Familie". Verifiziert durch Test `rendert die App-Sektion mit Download-Link zur APK`.
 
-## Edge Cases Verification (aus analysis.md)
+2. **Klick löst Datei-Download aus, keine SPA-Navigation** → ✅ PASS. Implementiert als natives `<a href="/downloads/familio.apk" download>` (kein `<Link>`/`navigate()`). Test prüft `href`- und `download`-Attribut direkt am gerenderten `<a>`-Element.
 
-| # | Edge Case | Status |
-|---|---|---|
-| 1 | Bis vor Von → Button disabled + Fehlermeldung | ✅ Getestet |
-| 2 | Von nach Bis verschoben → Bis zieht automatisch nach | ✅ Getestet |
-| 3 | Von == Bis (eintägig) bleibt gültig | ✅ Getestet (`EventFormModal` + `MonthView`-Regressionstests) |
-| 4 | Mehrtägiger Termin über Monats-/Wochenwechsel hinweg | ⚠️ Nicht automatisiert getestet — kein stabiler Datums-Selektor in `MonthView`-Zellen über Monatsgrenzen hinweg verfügbar; Algorithmus behandelt Monatsgrenzen nicht als Sonderfall (gleicher Code-Pfad wie innerhalb eines Monats), Risiko eingeschätzt als gering aber unverifiziert (siehe `impl-report.md`) |
-| 5 | Sehr langer Zeitraum (mehrere Wochen) | ✅ Indirekt abgedeckt — Algorithmus ist eine simple Schleife ohne Obergrenze, kein dediziertes Performance-Test nötig für diese Größenordnung |
-| 6 | Mehrere überlappende mehrtägige Termine am selben Tag / "+N weitere" | ✅ Getestet (`MonthView.test.tsx`: "respektiert das '+N weitere'-Limit pro Tag auch mit einem mehrtägigen Termin") |
-| 7 | Ganztägig deaktivieren bei mehrtägigem Termin → Bis geht verloren | ℹ️ Bewusstes Verhalten, kein Fehlerfall — nicht separat getestet, da es kein Assertable "falsches" Verhalten ist (entspricht der bestehenden `!allDay`-UI, die schon vor dieser Story getestet war) |
-| 8 | Testauswirkung auf bestehende "Ganztägig"-Tests | ✅ Behoben — zwei Tests aktualisiert (`type=date` statt Abwesenheit), ein Test verstärkt (`type=time`-Check beim Zurückwechseln) |
+3. **APK unter `/downloads/familio.apk` erreichbar (Vite `public/`)** → ✅ PASS (strukturell). `webapp/public/downloads/` existiert im Repo; Vite kopiert `public/` 1:1 ins Build-Output ohne Config-Änderung. ⚠️ **Hinweis:** Die tatsächliche `familio.apk`-Datei liegt aktuell nicht im Arbeitsverzeichnis — das ist laut story.md/analysis.md explizit ein manueller Nutzer-Schritt außerhalb des Codes und daher kein Test-Fail, aber der Link führt bis dahin zu einem 404. Siehe „Coverage Gaps".
 
-## New Tests Written
+4. **Klar als Android-App erkennbar** → ✅ PASS. Titel "Android-App" + `Smartphone`-Icon im Icon-Badge, Hint-Text "APK herunterladen und installieren".
 
-- `EventFormModal.test.tsx` (+5 Tests, neuer Block "Mehrtägig"): Vorausfüllen bei mehrtägigem `editEvent`, Speichern mit korrektem Zeitraum, Button-Disable bei ungültigem Bereich, Auto-Korrektur von "Bis", Von==Bis bleibt gültig. Zusätzlich 2 bestehende Tests im Block "Ganztägig" an die neue Von/Bis-Datumsfeld-Realität angepasst.
-- `MonthView.test.tsx` (**neu**, 5 Tests): Regression Eintägig (ganztägig + nicht-ganztägig mit abweichendem Enddatum), Mehrtägig über 3 Tage, Klick auf eine der mehreren Pills ruft `onEventClick` korrekt auf, "+N weitere"-Limit bleibt pro Tag korrekt bei gemischten Ein-/Mehrtages-Terminen.
-- `WeekView.test.tsx` (+2 Tests, neuer Block "Mehrtägige Ganztägig-Termine"): Termin erscheint an jedem betroffenen Tag der sichtbaren Woche, erscheint nicht außerhalb seines Zeitraums.
+5. **Optisch konsistent mit bestehenden Settings-Cards (Light/Dark)** → ✅ PASS. Ausschließlich bestehende Tokens verwendet (`--color-primary`, `--color-primary-subtle`, `--radius-full`, `--space-*`, `--font-size-*`), keine Hex-Werte hardcodiert, gleiche `.section`/`.card`/`.settingRow`-Struktur wiederverwendet — funktioniert automatisch in beiden Themes, da alle Tokens theme-aware in `tokens.css` definiert sind.
+
+## Edge Cases (aus analysis.md)
+
+1. APK-Datei fehlt zur Laufzeit → strukturell nicht verhinderbar bei statischem `<a>`-Tag, wie erwartet dokumentiert. Nicht code-seitig behebbar/testbar (kein E2E-Download-Test in diesem Setup).
+2. `download`-Attribut wird von manchen mobilen Browsern (iOS) ignoriert → akzeptiertes Verhalten laut analysis.md, kein Blocker.
+3. Dark/Light Theme → ✅ nur Tokens verwendet, keine manuelle Verifikation in einem echten Browser durchgeführt (kein visueller Screenshot-Test in diesem Review), aber Token-Nutzung durchgängig korrekt.
+4. Langsame Verbindung / kein Custom-Loading-UI → ✅ wie spezifiziert, kein Blob-Fetch verwendet.
+5. Unsignierte APK / Sicherheits-Handling → Out of Scope, korrekt nicht implementiert.
+
+## Tests Added
+
+- `webapp/src/pages/SettingsPage.test.tsx`: 1 neuer Test (`rendert die App-Sektion mit Download-Link zur APK`), prüft Sichtbarkeit der Section, des Titels und `href`/`download`-Attribute des Links.
+
+## Full Regression Run
+
+`npm test -- --run` in `webapp/`: **15 Test-Dateien, 166 Tests — alle grün**, keine Regressionen in anderen Komponenten/Seiten. `npx tsc --noEmit`: keine Type-Errors.
 
 ## Coverage Gaps
 
-1. Kein automatisierter Test für Mehrtägigkeit über eine Monats- oder Wochengrenze hinweg (Edge Case 4) — technisch durch fehlenden stabilen Zellen-Selektor in `MonthView` erschwert, nicht durch fehlende Testbarkeit der Logik selbst.
-2. Kein E2E-/Browser-Test des nativen `<input type="date">`-Verhaltens (jsdom simuliert dies nur begrenzt — funktionierte in den Unit-Tests nach Anpassung, aber echtes Browser-Verhalten ungetestet).
-
-## Full Suite Results
-
-- Backend: **116/116 Tests grün** (unverändert, keine Backend-Änderung in dieser Story).
-- Frontend: **165/165 Tests grün** (`npx vitest run`), inkl. 12 neuer Tests.
-- TypeScript: `npx tsc --noEmit` — keine Fehler.
+- Kein automatisierter Test verifiziert, dass die Datei unter `/downloads/familio.apk` im Produktions-Build tatsächlich physisch existiert und einen 200er liefert (reiner Deployment-/Content-Aspekt, nicht durch Unit-/Component-Tests abdeckbar). Empfehlung: manueller Check nach dem nächsten Deploy, sobald die APK-Datei abgelegt wurde.
+- Kein visueller/Browser-basierter Light/Dark-Screenshot-Test — Token-basierte Umsetzung macht das Risiko aber gering.
 
 ## Verdict
 
 **PASS ✅**
 
-Alle 5 Acceptance Criteria sind durch automatisierte Tests abgedeckt und grün. Die einzige
-offene Coverage-Lücke (Monats-/Wochengrenze) betrifft einen Rand-Fall, der über denselben,
-bereits getesteten Code-Pfad läuft wie der Kernfall — das Risiko ist niedrig, aber es fehlt ein
-expliziter Nachweis.
+Alle 5 Acceptance Criteria sind code-seitig erfüllt. Der einzige offene Punkt (fehlende `familio.apk`-Binärdatei im Repo) ist explizit Out of Scope für diese Story und kein Implementierungsmangel — als operativer Hinweis in impl-report.md dokumentiert, kein Blocker für den Human.

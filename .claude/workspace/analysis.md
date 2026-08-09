@@ -1,35 +1,29 @@
-# BA Analysis — Mehrtägige Termine (Ferien etc.)
+# BA Analysis — Android-App-Download in den Einstellungen
 
-## Business Rules
+## 1. Business Rules
 
-1. **Kein Backend-Change nötig** — `start_dt`/`end_dt` unterstützen bereits beliebige Datumsspannen; die einzige bestehende Validierung (`end_dt > start_dt`) lässt Mehrtägigkeit bereits zu. Reines Frontend-Feature.
-2. Mehrtägigkeit ist ausschließlich für `allDay=true` verfügbar. Bei nicht-ganztägigen Terminen bleibt die bisherige Ein-Tages-UI (Datum + Von/Bis-Uhrzeit) unverändert.
-3. Beim Aktivieren von "Ganztägig" wird das einzelne "Datum"-Feld durch zwei Felder "Von" und "Bis" (beide `type="date"`) ersetzt. Beim Deaktivieren erscheint wieder das einzelne "Datum"-Feld (übernimmt den "Von"-Wert) plus die Zeit-Felder.
-4. Validierung: "Bis" muss `>= "Von"` sein — Gleichstand ist erlaubt und entspricht dem bisherigen eintägigen ganztägigen Termin (Rückwärtskompatibilität zur letzten Story).
-5. **MonthView:** ein Termin erscheint als eigene Pill an jedem Tag im Bereich `[start, end]` (inklusive Endpunkte), nicht nur am Starttag — betrifft nur `allDay=true`-Termine, da nicht-ganztägige Termine laut vorheriger Story ohnehin eintägig bleiben.
-6. **WeekView-Ganztägig-Zeile:** gleiches Prinzip — der Termin erscheint an jedem Tag im Bereich, der in der sichtbaren Woche liegt.
-7. Das bestehende "+N weitere"-Muster (MonthView: 3 sichtbar, WeekView-Ganztägig-Zeile: 2 sichtbar) gilt unverändert **pro Tag** — ein mehrtägiger Termin zählt an jedem Tag, an dem er erscheint, separat zur dortigen Tages-Terminliste.
+1. Der Download-Link zeigt immer auf den statischen Pfad `/downloads/familio.apk` (relativ zur Webapp-Origin) — kein API-Call, keine Backend-Beteiligung.
+2. Vite kopiert alles unter `webapp/public/` unverändert in den Build-Output (`dist/`) unter dem gleichen relativen Pfad. `webapp/public/downloads/familio.apk` → `/downloads/familio.apk` zur Laufzeit. Kein Build-Schritt nötig.
+3. Der Link/Button muss ein natives `<a href="/downloads/familio.apk" download>`-Element sein (kein `<button onClick={() => navigate(...)}>`), damit der Browser den Download auslöst statt React-Router-Navigation zu versuchen.
+4. Der neue Abschnitt fügt sich als weitere `<section>` in `SettingsPage.tsx` ein, analog zu "Darstellung" und "Familie" (gleiche Card-/Section-Struktur, `styles.section` / `styles.card` / `styles.settingRow`).
+5. Es gibt keinen Bezug zu Familienmitgliedern oder Auth — der Abschnitt ist statisch und für alle Nutzer identisch sichtbar.
 
-## Edge Cases
+## 2. Edge Cases
 
-1. Nutzer setzt "Bis" vor "Von" → Speichern-Button deaktiviert (analog zur bestehenden Zeit-Validierung), Fehlermeldung "Enddatum muss am oder nach dem Startdatum liegen".
-2. Nutzer ändert "Von" auf ein Datum nach dem aktuellen "Bis" → automatische Korrektur: "Bis" wird auf den neuen "Von"-Wert nachgezogen (verhindert einen sofort ungültigen Zustand, ohne den Nutzer zu blockieren).
-3. Ein-Tages-ganztägiger-Termin ("Von" == "Bis") → unverändertes bestehendes Verhalten aus der letzten Story, keine Regression.
-4. Mehrtägiger Termin über einen Monats-/Wochenwechsel hinweg (z. B. 28.07.–03.08.) → erscheint korrekt in beiden Monats-/Wochenansichten für die jeweils sichtbaren Tage im Bereich, auch über Grid-Grenzen (anderer Monat/andere Woche) hinweg.
-5. Sehr langer Zeitraum (z. B. 6 Wochen Sommerferien) → keine Obergrenze in v1; Performance vernachlässigbar (Datums-Iteration über wenige Dutzend Tage).
-6. Mehrere überlappende mehrtägige Termine am selben Tag → bestehendes "+N weitere"-Pattern greift unverändert.
-7. Bearbeiten eines mehrtägigen Termins + gleichzeitiges Deaktivieren von "Ganztägig" → "Bis" geht im Formular verloren (nur clientseitig, nicht im Backend, bis gespeichert wird); Termin wird dann als eintägiger Zeittermin am "Von"-Datum gespeichert — bewusstes Verhalten, da Mehrtägigkeit exklusiv an "Ganztägig" gekoppelt ist (siehe Story Out of Scope).
-8. **Testauswirkung:** Zwei bestehende Tests aus "Ganztägige Termine" (`EventFormModal.test.tsx`) gehen davon aus, dass bei aktiviertem "Ganztägig" **gar keine** Von/Bis-Felder existieren (nur noch "Datum" implizit weg, kein Ersatz). Das ändert sich jetzt bewusst — Von/Bis existieren weiterhin, aber als `type="date"` statt `type="time"`. Diese zwei Tests müssen von Dev angepasst werden (kein Verhaltensbruch, sondern erwartete Weiterentwicklung).
+1. **APK-Datei fehlt zur Laufzeit** (z. B. lokal noch nicht abgelegt, oder beim Deployment vergessen): Klick auf den Link führt zu einem Browser-eigenen 404 (kein Custom-Error-Handling nötig/möglich bei einem reinen `<a>`-Tag). Aktuell (Stand dieser Story) existiert `webapp/public/downloads/` bereits als Verzeichnis, aber **ohne** `familio.apk` — muss vom Nutzer manuell nachgelegt werden. Nicht blockierend für die Implementierung, aber der Download funktioniert erst, sobald die Datei tatsächlich da liegt.
+2. **Browser-Verhalten bei `download`-Attribut:** Manche mobile Browser (v. a. iOS Safari) ignorieren `download` und öffnen die Datei stattdessen inline/in neuem Tab. Kein Blocker — akzeptables Verhalten, da die Zielgruppe (Android-Nutzer) korrekt bedient wird.
+3. **Dark/Light Theme:** Neuer Abschnitt muss bestehende CSS-Tokens nutzen, kein Hardcoding von Farben.
+4. **Lange Dateigröße / langsame Verbindung:** Kein spezielles Loading-UI nötig — natives Browser-Download-Verhalten reicht (kein Fetch/Blob-Download nötig, da es sich um einen einfachen statischen Link handelt).
+5. **Sicherheitsaspekt:** Da `familio.apk` unsigniert sein könnte, kein Anti-Virus-Scan o.ä. im Scope — reine Bereitstellung, kein Signierungs-/Vertrauens-Handling in dieser Story.
 
-## Data Model Implications
+## 3. Data Model Implications
 
-- **Keine.** Backend (Modell, Schema, Router) bleibt vollständig unverändert.
-- Frontend: `EventFormModal` bekommt neuen State `endDate` (zusätzlich zum bestehenden `date`, das semantisch zu "Von" wird).
-- `MonthView`/`WeekView`: Event-zu-Tag-Zuordnung für ganztägige Termine wird von "nur Starttag" auf "jeder Tag im Bereich `[start, end]`" erweitert — reine Rendering-Logik, kein Datenmodell-Impact.
+- Keine. Keine neuen DB-Felder, keine neuen API-Endpunkte, keine neuen Pydantic-Schemas. Rein statisches Frontend-Asset + UI-Element in `webapp/src/pages/SettingsPage.tsx` und `SettingsPage.module.css`.
 
-## Open Questions
+## 4. Open Questions
 
-**BLOCKING:** Keine.
+1. *(NON-BLOCKING)* Soll der Link zusätzlich in der Android-App selbst angezeigt werden (z. B. Settings-Screen dort, um Familienmitgliedern ohne die App den Link teilen zu lassen)? — Da die Android-App die APK nicht sinnvoll "für sich selbst" anbieten muss (wer sie nutzt, hat sie bereits), wird das als Out-of-Scope behandelt (siehe story.md). Dev kann optional einen Hinweistext einbauen, ist aber nicht Teil der AC.
+2. *(NON-BLOCKING)* Soll der Abschnitt einen Hinweis wie "nur für Android" oder ein Android-Icon bekommen? Empfehlung: ja (AC 4), aber genaue Formulierung/Icon ist Design-Entscheidung, nicht BA-Scope.
+3. *(NON-BLOCKING)* Muss die tatsächliche `familio.apk`-Datei in diesem Story-Durchlauf abgelegt werden? Nein — das Repository hat bereits `webapp/public/downloads/` als Verzeichnis; das Ablegen der eigentlichen Binärdatei ist ein manueller Deployment-Schritt außerhalb des Code-Reviews (Binärdatei im Git-Repo ist ohnehin fraglich, siehe Architect-Phase für Empfehlung zu `.gitignore`).
 
-**NON-BLOCKING:**
-- Kein durchgehender visueller Balken über mehrere Tage in v1 (Out of Scope) — Pill-Wiederholung pro Tag ist der pragmatische v1-Ansatz, konsistent mit den bereits etablierten Pill-Mustern in beiden Views.
+Keine BLOCKING-Fragen. Weiter zu Phase 3 (Architect).

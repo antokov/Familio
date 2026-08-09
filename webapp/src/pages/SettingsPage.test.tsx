@@ -87,4 +87,14 @@ describe('SettingsPage', () => {
     const editBtns = screen.getAllByRole('button', { name: /bearbeiten/i })
     expect(editBtns).toHaveLength(MOCK_MEMBERS.length)
   })
+
+  it('rendert die App-Sektion mit Download-Link zur APK', () => {
+    renderPage()
+    expect(screen.getByText('App')).toBeInTheDocument()
+    expect(screen.getByText('Android-App')).toBeInTheDocument()
+
+    const downloadLink = screen.getByRole('link', { name: /herunterladen/i })
+    expect(downloadLink).toHaveAttribute('href', '/downloads/familio.apk')
+    expect(downloadLink).toHaveAttribute('download')
+  })
 })

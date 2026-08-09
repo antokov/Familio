@@ -1,67 +1,30 @@
-# Implementation Report — Mehrtägige Termine (Ferien etc.)
+# Dev Implementation Report — Android-App-Download in den Einstellungen
 
 ## Approach
 
-Reines Frontend-Feature — das Backend unterstützte beliebige Datumsspannen bereits
-unverändert (`end_dt > start_dt` war die einzige Validierung). `EventFormModal` zeigt bei
-aktiviertem "Ganztägig" jetzt eine Von/Bis-Datums-Zeile statt des einzelnen "Datum"-Felds, mit
-Auto-Korrektur ("Bis" zieht nach, wenn "Von" darüber hinausgeschoben wird) und Validierung
-("Bis" muss ≥ "Von" sein). `MonthView` und `WeekView` ordnen ganztägige Termine jetzt jedem Tag
-im Bereich `[start, end]` zu (statt nur dem Starttag) — nicht-ganztägige Termine bleiben
-unverändert bei Einzeltag-Zuordnung.
+Neue dritte `<section>` "App" in `SettingsPage.tsx` ergänzt, exakt nach arch-decision.md und design-decision.md: Icon-Badge (Smartphone, `--color-primary-subtle`/`--color-primary`, rund, 40px) + Titel/Hint links, Outline-Pill-Button mit Download-Icon rechts. Der Button ist ein natives `<a href="/downloads/familio.apk" download>` — kein React-Router-Link, kein JS-Klick-Handler, damit der Browser den Datei-Download nativ übernimmt.
 
 ## Files Changed
 
-- `webapp/src/components/EventFormModal/EventFormModal.tsx` — neuer `endDate`-State,
-  bedingte Von/Bis-Datums-Zeile bei `allDay`, `isDateRangeValid()`, Auto-Korrektur-Handler
-  (`handleDateChange`, `handleAllDayChange`), `handleSubmit`/`isValid` nutzen jetzt
-  `date`/`endDate` je nach `allDay`.
-- `webapp/src/components/EventFormModal/EventFormModal.module.css` — neue Klasse `.dateRow`
-  (identisches Grid-Layout wie `.timeRow`, als eigener Selektor für spätere Entkopplung).
-- `webapp/src/components/MonthView/MonthView.tsx` — `eventDateKeys()`-Helper (mit
-  `parseLocalDate()` zur Vermeidung des UTC-Parse-Fallstricks bei `new Date("YYYY-MM-DD")|`,
-  konsistent mit dem bereits etablierten TD-05-Pattern) erweitert die Tag-Zuordnung auf den
-  gesamten Datumsbereich bei `allDay`-Events.
-- `webapp/src/components/WeekView/WeekView.tsx` — `allDayEventsByDay()` von exaktem
-  String-Vergleich auf Bereichs-Zugehörigkeit (`dateStr >= start && dateStr <= end`) umgestellt
-  — reiner String-Vergleich auf ISO-Datumsstrings, keine `Date`-Objekt-Arithmetik nötig.
-- `webapp/src/components/EventFormModal/EventFormModal.test.tsx` — zwei bestehende Tests
-  angepasst (siehe `analysis.md` Edge Case 8: Von/Bis existieren bei Ganztägig jetzt als
-  `type="date"` statt komplett zu verschwinden), neuer Testblock "Mehrtägig" (+5 Tests).
-- **NEU:** `webapp/src/components/MonthView/MonthView.test.tsx` — MonthView hatte bisher keine
-  Tests (TD aus FS-16); da diese Story die Kern-Bucketing-Logik ändert, wurden gezielte Tests
-  ergänzt (Regression Eintägig + neue Mehrtägig-Fälle, 5 Tests).
-- `webapp/src/components/WeekView/WeekView.test.tsx` — neuer Testblock "Mehrtägige
-  Ganztägig-Termine" (+2 Tests).
+- `webapp/src/pages/SettingsPage.tsx` — Import `Smartphone`, `Download` aus `lucide-react` ergänzt; neue `<section>` "App" nach der "Familie"-Section eingefügt.
+- `webapp/src/pages/SettingsPage.module.css` — neue Klassen `.appInfo`, `.appIconWrap`, `.downloadBtn` (+ `:hover`/`:active`) ergänzt, ausschließlich mit bestehenden Tokens aus `tokens.css`.
+- `webapp/src/pages/SettingsPage.test.tsx` — neuer Test `rendert die App-Sektion mit Download-Link zur APK`: prüft Sichtbarkeit von "App"/"Android-App" sowie `href="/downloads/familio.apk"` und vorhandenes `download`-Attribut auf dem Link.
 
-**Backend:** keine Änderungen.
+## Assumptions
 
-## Assumptions Made
-
-- Von-Datum-Verschiebung nach Bis → Bis wird automatisch nachgezogen (nicht blockiert) —
-  konsistent mit der in `analysis.md` festgelegten Annahme, den Nutzer nicht unnötig zu
-  bremsen.
-- Beim Deaktivieren von "Ganztägig" bei einem mehrtägigen Termin geht "Bis" verloren (Termin
-  wird zum eintägigen Zeittermin am "Von"-Datum) — bewusstes, bereits in `analysis.md`
-  dokumentiertes Verhalten (Mehrtägigkeit ist exklusiv an "Ganztägig" gekoppelt).
-- Kein durchgehender visueller Balken über mehrere Tage — Pill-Wiederholung pro Tag (Out of
-  Scope laut Story), konsistent mit den bereits etablierten Pill-Mustern in beiden Views.
+- `webapp/public/downloads/` existiert bereits im Repo als Verzeichnis; die eigentliche `familio.apk`-Binärdatei wird **nicht** von Dev abgelegt (siehe analysis.md Edge Case 1 / Out of Scope in story.md) — das ist ein manueller Schritt des Nutzers vor dem nächsten Deployment.
+- Vite kopiert `public/` unverändert ins Build-Output, daher keine Änderung an `vite.config.ts` nötig.
+- Kein globaler `:focus-visible`-Style-Override im Projekt gefunden, der angepasst werden müsste — Standard-Browser-Fokus-Outline bleibt auf dem neuen `<a>`-Element erhalten (kein `outline: none` gesetzt).
 
 ## Deviations from arch-decision.md
 
-Keine. Alle in `arch-decision.md` benannten Dateien wurden wie vorgesehen angefasst.
+Keine.
 
 ## Technical Debt / Follow-up
 
-- Kein Test für die Mehrtägigkeit über eine Monats-/Wochengrenze hinweg (z. B. 28.07.–03.08.)
-  — aus Testbarkeits-Gründen ausgelassen (MonthView-Zellen haben keinen stabilen
-  Datums-Selektor über Monatsgrenzen hinweg, nur Tageszahlen, die zwischen Monaten kollidieren
-  können); der zugrundeliegende Algorithmus behandelt Monatsgrenzen nicht als Sonderfall, das
-  Risiko einer Regression dort ist gering, aber unverifiziert.
-- Kein durchgehender visueller Balken (bewusst Out of Scope, siehe Story) — potenzielle
-  spätere Politur-Story.
-- Android-Parität fehlt weiterhin (Web-only, wie bei allen bisherigen Kalender-Features).
+- `familio.apk` liegt aktuell nicht im Arbeitsverzeichnis — Download-Link liefert 404, bis die Datei manuell nach `webapp/public/downloads/familio.apk` gelegt wird. Kein Code-Fix nötig, aber operativ zu beachten vor dem nächsten Deploy.
+- Größere APK-Binärdateien direkt im Git-Repo (`webapp/public/`) sind langfristig nicht ideal (Repo-Größe wächst mit jeder neuen App-Version). Als Follow-up denkbar: APK stattdessen auf dem NAS/Coolify-Volume ablegen und per Nginx/Static-Route ausliefern (analog zum bestehenden `UPLOAD_DIR`-Pattern für Dokumente) statt im Webapp-`public/`-Ordner zu versionieren. Nicht Teil dieser Story, da explizit Out of Scope.
 
 ## Open Items
 
-Keine offenen Fragen, die eine menschliche Entscheidung erfordern.
+Keine, die eine menschliche Entscheidung erfordern.

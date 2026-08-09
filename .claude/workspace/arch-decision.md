@@ -1,39 +1,53 @@
-# Architect Scoping — Mehrtägige Termine (Ferien etc.)
+# Architect Decision — Android-App-Download in den Einstellungen
 
-## Codebase-Kontext
+## 1. Codebase Scan (relevant excerpt)
 
-- **Reines Frontend-Feature.** `start_dt`/`end_dt` im Backend sind bereits beliebige Datumsspannen-fähig (`end_dt > start_dt` ist die einzige Validierung) — kein Modell-/Schema-/Router-Change, keine neue DB-Spalte, kein Alembic-Risiko wie beim letzten Feature.
-- `MonthView.tsx` baut aktuell eine `Map<dateStr, CalendarEvent[]>` ausschließlich über `ev.startDt.slice(0, 10)` — jedes Event landet nur in der Zelle seines Starttags. Muss auf "jeder Tag im Bereich" erweitert werden.
-- `WeekView.tsx`s `allDayEventsByDay(day)` filtert aktuell exakt `ev.startDt.slice(0, 10) === dateStr` — muss auf Bereichs-Zugehörigkeit erweitert werden. `eventsByDay()` (nicht-ganztägige, zeitgebundene Events) bleibt **unverändert**, da Mehrtägigkeit exklusiv für `allDay=true` gilt.
-- `EventFormModal.tsx` hat aktuell ein einzelnes `date`-Feld ("Datum") plus `startTime`/`endTime` (nur bei `!allDay` sichtbar). YYYY-MM-DD-Strings sind lexikographisch sortierbar — Bereichsvergleiche (`dateStr >= start && dateStr <= end`) funktionieren als reiner String-Vergleich, keine `Date`-Objekt-Arithmetik nötig.
-- `.timeRow`-CSS-Klasse (`EventFormModal.module.css`) ist eine generische 2-Spalten-Grid-Utility (`grid-template-columns: 1fr 1fr`) — für die neue Von/Bis-Datums-Zeile wiederverwendbar (als neue, gleich-definierte Klasse `.dateRow`, um die Namensgebung sauber zu halten, siehe `design-decision.md`).
+- `webapp/src/pages/SettingsPage.tsx` — bestehende Settings-Seite mit zwei `<section>`-Blöcken ("Darstellung", "Familie"), jeweils `styles.section` → `h2.sectionTitle` + `div.card` → `div.settingRow` (Label/Hint links, Control rechts).
+- `webapp/src/pages/SettingsPage.module.css` — Styles für obige Struktur (Tokens: `--space-*`, `--color-*`, `--radius-*`, `--font-size-*`).
+- `webapp/public/downloads/` — existiert bereits im Repo als leeres Verzeichnis (kein `.gitkeep` gefunden, kein Git-Tracking eines leeren Ordners). Die eigentliche `familio.apk` liegt (laut Task) dort, ist aber aktuell **nicht** im Arbeitsverzeichnis vorhanden — muss vom Nutzer manuell nachgelegt werden (Out of Scope für Dev, siehe analysis.md).
+- Vite-Standardverhalten: alles unter `webapp/public/` wird 1:1 nach `/` im Build-Output gemappt — kein `vite.config.ts`-Eingriff nötig. Kein separater Check nötig, `vite.config.ts` unverändert lassen.
+- Kein Backend-Bezug — reines Frontend-Static-Asset + UI.
 
-## Dateien, die Dev anfassen soll
+## 2. Reuse
 
-1. `webapp/src/components/EventFormModal/EventFormModal.tsx` — neuer State `endDate`; bei `allDay=true` wird statt des einzelnen "Datum"-Felds eine Von/Bis-Datums-Zeile gerendert; Validierung (`isDateRangeValid`) und `handleSubmit` nutzen `date`/`endDate` für `startDt`/`endDt`; Auto-Korrektur wenn "Von" nach "Bis" verschoben wird oder "Ganztägig" mit ungültigem Bestandszustand aktiviert wird.
-2. `webapp/src/components/EventFormModal/EventFormModal.module.css` — neue Klasse `.dateRow` (identisches Grid-Layout wie `.timeRow`).
-3. `webapp/src/components/MonthView/MonthView.tsx` — Event-zu-Tag-Zuordnung (`eventsByDay`-Map-Aufbau) erweitert: für `allDay`-Events jeden Tag im Bereich `[startDt, endDt]` in die Map eintragen, nicht nur den Starttag. Nicht-ganztägige Events bleiben bei Einzeltag-Zuordnung.
-4. `webapp/src/components/WeekView/WeekView.tsx` — `allDayEventsByDay(day)` von exaktem Datums-Vergleich auf Bereichs-Zugehörigkeit (`dateStr >= startDateStr && dateStr <= endDateStr`) umgestellt.
-5. `webapp/src/components/EventFormModal/EventFormModal.test.tsx` — **zwei bestehende Tests müssen angepasst werden** (siehe `analysis.md` Edge Case 8): "blendet Zeit-Felder aus…" und "Checkbox ist bei ganztägigem editEvent…" gehen aktuell von "keine Von/Bis-Felder bei Ganztägig" aus — müssen auf "Von/Bis existieren weiterhin, aber `type=date`" umgestellt werden. Neue Testfälle für Mehrtägigkeit ergänzen.
-6. **NEU:** `webapp/src/components/MonthView/MonthView.test.tsx` — MonthView hat aktuell keine Tests (bekanntes TD aus FS-16); da diese Story die Kern-Bucketing-Logik ändert, braucht sie jetzt gezielte Tests (Regression: Eintages-Event landet nur an seinem Tag; neu: Mehrtages-Event landet an jedem Tag im Bereich, auch über Monatsgrenzen der Grid-Anzeige hinweg).
-7. `webapp/src/components/WeekView/WeekView.test.tsx` — neue Testfälle für Mehrtages-Events in der Ganztägig-Zeile ergänzen (bestehende Tests bleiben unverändert gültig).
+- Bestehendes Card-/Section-Pattern aus `SettingsPage.tsx`/`.module.css` wird 1:1 wiederverwendet (dritte `<section>` nach "Familie").
+- Icon-Library `lucide-react` ist bereits Projektabhängigkeit (siehe Imports `Pencil, Trash2, Plus`) — für den neuen Abschnitt bietet sich `Download` oder `Smartphone` aus `lucide-react` an (Design-Entscheidung in Phase 3b).
 
-## Patterns, die Dev befolgen MUSS
+## 3. Files Dev Must Touch
 
-- **String-Vergleich statt Date-Arithmetik** für Bereichs-Zugehörigkeit — `dateStr >= ev.startDt.slice(0, 10) && dateStr <= ev.endDt.slice(0, 10)` funktioniert korrekt für ISO-Datumsstrings (YYYY-MM-DD), keine Zeitzonen-Fallstricke, kein `new Date()`-Overhead pro Zelle.
-- **"Von"/"Bis" als Label-Text wiederverwendet**, auch für die Datums-Variante (bisher nur für Uhrzeit genutzt) — konsistent mit dem generischen "von…bis"-Konzept, keine neuen Label-Texte einführen. Da Zeit- und Datums-Variante sich gegenseitig ausschließen (`allDay`-Flag), gibt es keine Kollision im DOM.
-- **`.dateRow` als eigene CSS-Klasse**, nicht `.timeRow` direkt wiederverwenden — gleiche Werte, aber semantisch getrennt, falls eine der beiden später unabhängig angepasst wird.
-- **Auto-Korrektur statt Blockieren** bei Datums-Widersprüchen (siehe `analysis.md` Edge Case 2) — wenn "Von" nach "Bis" verschoben wird, "Bis" automatisch nachziehen, nicht nur die Eingabe verweigern.
-- **`MonthView`/`WeekView` bleiben reine Präsentationskomponenten** — keine neue Zustandslogik, nur erweiterte Tag-Zuordnung beim Rendern.
+1. `webapp/src/pages/SettingsPage.tsx` — neue `<section>` "App" mit Download-Link (`<a href="/downloads/familio.apk" download>`).
+2. `webapp/src/pages/SettingsPage.module.css` — ggf. neue/erweiterte Klassen für den Download-Button, falls das bestehende `settingRow`-Pattern nicht ausreicht (z. B. Button-artige CTA statt reinem Info-Row).
+3. `webapp/src/pages/SettingsPage.test.tsx` — Test ergänzen: neuer Abschnitt vorhanden, Link zeigt auf korrekten `href`, hat `download`-Attribut.
 
-## Explizite Constraints (was Dev NICHT tun soll)
+Keine weiteren Dateien nötig. Kein Router-/API-/Backend-Code betroffen.
 
-- Keine Backend-Änderungen (Modell, Schema, Router, Migration) — dieses Feature braucht keine.
-- Keine mehrtägigen Termine mit Uhrzeit (`allDay=false`) — bleibt exklusiv für ganztägige Termine (Out of Scope laut Story).
-- Kein durchgehender visueller Balken über mehrere Tage/Spalten (Out of Scope) — Pill-Wiederholung pro Tag reicht für v1.
-- Keine Änderung an `document_extraction.py` oder `ExtractEventsModal` — Dokumenten-Extraktion bleibt bei eintägigen Terminen (bereits als FS-30 im Backlog erfasst, nicht Teil dieser Story).
-- Keine Änderungen an `android/`.
+## 4. Patterns Dev Must Follow
 
-## Blocker-Check
+- Gleiche Section-/Card-Struktur wie bestehende Abschnitte (`styles.section`, `styles.sectionTitle`, `styles.card`).
+- CSS ausschließlich über bestehende Design-Tokens aus `webapp/src/styles/tokens.css` (keine Hex-Werte hardcoden).
+- Reines statisches `<a>`-Tag für den Download — **kein** `fetch`/Blob-Download, kein JS-Klick-Handler nötig (Business Rule 3 in analysis.md).
+- Deutsche UI-Texte (Projektkonvention, siehe restliche Settings-Seite: "Darstellung", "Familie", "Mitglied hinzufügen").
+- Test-Datei folgt bestehendem Muster in `SettingsPage.test.tsx` (React Testing Library, siehe vorhandene Tests für Struktur/Query-Stil).
 
-Keine Architektur-Risiken, die eine menschliche Entscheidung erfordern. Reine Frontend-Erweiterung ohne Datenmodell-Impact — niedrigstes Risiko-Profil der bisherigen Kalender-Features.
+## 5. Explicit Constraints (What NOT to do)
+
+- **NICHT** die eigentliche `familio.apk`-Binärdatei erzeugen oder committen — das ist ein manueller Nutzer-Schritt außerhalb dieses Story-Durchlaufs.
+- **NICHT** `react-router-dom`-`<Link>` oder `navigate()` für den Download verwenden — SPA-Navigation ist hier falsch, es muss ein natives `<a href="..." download>` sein.
+- **NICHT** User-Agent-Sniffing oder Plattform-Erkennung einbauen (Out of Scope laut PO).
+- **KEINE** Versions-/Update-Logik, kein Änderungen an `vite.config.ts`.
+- **KEINE** Änderungen an der Android-App (`android/`) — Feature ist auf die Webapp-Settings-Seite beschränkt.
+- Bestehende zwei Sections ("Darstellung", "Familie") nicht umbauen, nur um eine dritte ergänzen.
+
+## 6. Files Dev Needs in Context (max 5–8)
+
+1. `webapp/src/pages/SettingsPage.tsx`
+2. `webapp/src/pages/SettingsPage.module.css`
+3. `webapp/src/pages/SettingsPage.test.tsx`
+4. `webapp/src/styles/tokens.css` (Tokens nachschlagen)
+5. `.claude/workspace/story.md`
+6. `.claude/workspace/analysis.md`
+7. `.claude/workspace/design-decision.md` (folgt in Phase 3b)
+
+## Blocker Check
+
+Keine Architektur-Risiken, die eine menschliche Entscheidung erfordern (kein neuer Backend-Layer, keine neue Abhängigkeit, kein DB-Schema-Change). Weiter zu Phase 3b (Design), da `webapp/src/` betroffen ist.
