@@ -20,8 +20,18 @@ async def upload_file(
     filename: str = "test.pdf",
     content: bytes = b"%PDF-1.4 test",
     content_type: str = "application/pdf",
+    **form,
 ) -> dict:
-    resp = await client.post("/api/documents", files={"file": (filename, content, content_type)})
+    resp = await client.post(
+        "/api/documents", files={"file": (filename, content, content_type)}, data=form
+    )
+    assert resp.status_code == 201
+    return resp.json()
+
+
+async def create_member(client: AsyncClient, **overrides) -> dict:
+    payload = {"name": "Anton", "initials": "A", "color": "#5B6AF0"} | overrides
+    resp = await client.post("/api/family-members", json=payload)
     assert resp.status_code == 201
     return resp.json()
 
@@ -46,6 +56,53 @@ class TestExtractEventsEndpoint:
         body = resp.json()
         assert len(body["events"]) == 1
         assert body["events"][0]["title"] == "Elternabend"
+        assert body["events"][0]["attendees"] == []
+
+    async def test_prefills_attendee_from_assigned_family_member(self, client: AsyncClient, monkeypatch):
+        member = await create_member(client, name="Mira", initials="M", color="#4CAF82")
+        doc = await upload_file(client, family_member_id=member["id"])
+
+        async def fake_extract_events(file_path, content_type):
+            return [
+                ExtractedEvent(title="Sommerfest", start_dt="2026-06-20T10:00:00", end_dt="2026-06-20T14:00:00"),
+                ExtractedEvent(title="Elternabend", start_dt="2026-06-21T18:00:00", end_dt="2026-06-21T19:00:00"),
+            ]
+
+        monkeypatch.setattr(documents_router, "extract_events", fake_extract_events)
+
+        resp = await client.post(f"/api/documents/{doc['id']}/extract-events")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["events"]) == 2
+        for event in body["events"]:
+            assert event["attendees"] == [{"initials": "M", "color": "#4CAF82"}]
+
+    async def test_no_prefill_when_document_has_no_assigned_member(self, client: AsyncClient, monkeypatch):
+        doc = await upload_file(client)
+
+        async def fake_extract_events(file_path, content_type):
+            return [ExtractedEvent(title="Sommerfest", start_dt="2026-06-20T10:00:00", end_dt="2026-06-20T14:00:00")]
+
+        monkeypatch.setattr(documents_router, "extract_events", fake_extract_events)
+
+        resp = await client.post(f"/api/documents/{doc['id']}/extract-events")
+        assert resp.status_code == 200
+        assert resp.json()["events"][0]["attendees"] == []
+
+    async def test_no_prefill_when_assigned_member_was_deleted(self, client: AsyncClient, monkeypatch):
+        member = await create_member(client)
+        doc = await upload_file(client, family_member_id=member["id"])
+        del_resp = await client.delete(f"/api/family-members/{member['id']}")
+        assert del_resp.status_code == 204
+
+        async def fake_extract_events(file_path, content_type):
+            return [ExtractedEvent(title="Sommerfest", start_dt="2026-06-20T10:00:00", end_dt="2026-06-20T14:00:00")]
+
+        monkeypatch.setattr(documents_router, "extract_events", fake_extract_events)
+
+        resp = await client.post(f"/api/documents/{doc['id']}/extract-events")
+        assert resp.status_code == 200
+        assert resp.json()["events"][0]["attendees"] == []
 
     async def test_document_not_found_returns_404(self, client: AsyncClient):
         resp = await client.post("/api/documents/does-not-exist/extract-events")

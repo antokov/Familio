@@ -149,6 +149,28 @@
   accent-color: var(--color-primary);
 }
 
+.attendeePickerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.attendeeBtn {
+  border-radius: 50%;
+  transition: outline 0.12s ease;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.attendeeBtn:hover {
+  outline-color: var(--color-border);
+}
+
+.attendeeSelected {
+  outline-color: var(--color-primary) !important;
+}
+
 .emptyState {
   padding: var(--space-8) var(--space-6);
   text-align: center;

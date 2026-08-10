@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import { extractDate, extractTime } from '../EventFormModal/EventFormModal'
+import { AvatarBadge } from '../AvatarBadge/AvatarBadge'
 import type { ExtractedEventCandidate } from '../../types/document'
-import type { CreateEventInput } from '../../types/event'
+import type { Attendee, CreateEventInput } from '../../types/event'
+import type { FamilyMember } from '../../types/family'
 import styles from './ExtractEventsModal.module.css'
 
 interface ExtractEventsModalProps {
   filename: string
   candidates: ExtractedEventCandidate[]
+  familyMembers: FamilyMember[]
   createEvent: (input: CreateEventInput) => Promise<boolean>
   onDone: (createdCount: number) => void
   onClose: () => void
@@ -20,6 +23,7 @@ interface CandidateRow {
   startTime: string
   endTime: string
   allDay: boolean
+  attendees: Attendee[]
   selected: boolean
 }
 
@@ -31,6 +35,7 @@ function toRow(candidate: ExtractedEventCandidate): CandidateRow {
     startTime: extractTime(candidate.startDt),
     endTime: extractTime(candidate.endDt),
     allDay: candidate.allDay,
+    attendees: candidate.attendees,
     selected: true,
   }
 }
@@ -40,7 +45,7 @@ function isRowValid(row: CandidateRow): boolean {
   return row.allDay || row.startTime < row.endTime
 }
 
-export function ExtractEventsModal({ filename, candidates, createEvent, onDone, onClose }: ExtractEventsModalProps) {
+export function ExtractEventsModal({ filename, candidates, familyMembers, createEvent, onDone, onClose }: ExtractEventsModalProps) {
   const [rows, setRows] = useState<CandidateRow[]>(candidates.map(toRow))
   const [saving, setSaving] = useState(false)
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null)
@@ -51,6 +56,14 @@ export function ExtractEventsModal({ filename, candidates, createEvent, onDone, 
 
   function updateRow(id: string, patch: Partial<CandidateRow>) {
     setRows(prev => prev.map(r => (r.id === id ? { ...r, ...patch } : r)))
+  }
+
+  function toggleAttendee(row: CandidateRow, initials: string, color: string) {
+    const isSelected = row.attendees.some(a => a.initials === initials)
+    const attendees = isSelected
+      ? row.attendees.filter(a => a.initials !== initials)
+      : [...row.attendees, { initials, color }]
+    updateRow(row.id, { attendees })
   }
 
   function handleBackdropClick(e: React.MouseEvent) {
@@ -67,7 +80,7 @@ export function ExtractEventsModal({ filename, candidates, createEvent, onDone, 
         title: row.title.trim(),
         startDt: row.allDay ? `${row.date}T00:00:00` : `${row.date}T${row.startTime}:00`,
         endDt: row.allDay ? `${row.date}T23:59:00` : `${row.date}T${row.endTime}:00`,
-        attendees: [],
+        attendees: row.attendees,
         allDay: row.allDay,
       })
       if (ok) created += 1
@@ -159,6 +172,22 @@ export function ExtractEventsModal({ filename, candidates, createEvent, onDone, 
                       />
                       Ganztägig
                     </label>
+                    <div className={styles.attendeePickerRow}>
+                      {familyMembers.map(m => (
+                        <button
+                          key={m.initials}
+                          type="button"
+                          className={`${styles.attendeeBtn} ${row.attendees.some(a => a.initials === m.initials) ? styles.attendeeSelected : ''}`}
+                          onClick={() => toggleAttendee(row, m.initials, m.color)}
+                          aria-label={m.name}
+                          aria-pressed={row.attendees.some(a => a.initials === m.initials)}
+                          title={m.name}
+                          disabled={saving}
+                        >
+                          <AvatarBadge initials={m.initials} color={m.color} size="sm" />
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               ))}

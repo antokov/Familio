@@ -20,6 +20,7 @@ function eventFromApi(raw: Record<string, unknown>, index: number): ExtractedEve
     startDt: raw['start_dt'] as string,
     endDt: raw['end_dt'] as string,
     allDay: (raw['all_day'] as boolean) ?? false,
+    attendees: (raw['attendees'] as ExtractedEventCandidate['attendees']) ?? [],
   }
 }
 

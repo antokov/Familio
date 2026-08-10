@@ -9,7 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.models.document import Document
+from app.models.family_member import FamilyMember
 from app.schemas.document import DocumentResponse, DocumentUpdate, ExtractEventsResponse
+from app.schemas.event import AttendeeSchema
 from app.services.document_extraction import DocumentExtractionError, extract_events
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -125,6 +127,15 @@ async def extract_document_events(
         events = await extract_events(file_path, document.content_type)
     except DocumentExtractionError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+
+    attendees: list[AttendeeSchema] = []
+    if document.family_member_id is not None:
+        member = await db.get(FamilyMember, document.family_member_id)
+        if member is not None:
+            attendees = [AttendeeSchema(initials=member.initials, color=member.color)]
+    for event in events:
+        event.attendees = attendees
+
     return ExtractEventsResponse(events=events)
 
 

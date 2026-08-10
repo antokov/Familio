@@ -1,3 +1,5 @@
+import type { Attendee } from './event'
+
 export interface Document {
   id: string
   filename: string
@@ -13,6 +15,7 @@ export interface ExtractedEventCandidate {
   startDt: string
   endDt: string
   allDay: boolean
+  attendees: Attendee[]
 }
 
 const EXTRACTABLE_CONTENT_TYPES = new Set([

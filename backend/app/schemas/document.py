@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.schemas.event import AttendeeSchema
 
 
 class DocumentUpdate(BaseModel):
@@ -24,6 +26,7 @@ class ExtractedEvent(BaseModel):
     start_dt: datetime
     end_dt: datetime
     all_day: bool = False
+    attendees: list[AttendeeSchema] = Field(default_factory=list)
 
 
 class ExtractEventsResponse(BaseModel):
