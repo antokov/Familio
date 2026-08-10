@@ -12,6 +12,7 @@ export interface ExtractedEventCandidate {
   title: string
   startDt: string
   endDt: string
+  allDay: boolean
 }
 
 const EXTRACTABLE_CONTENT_TYPES = new Set([

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models.event import CalendarEvent
-from app.schemas.event import EventCreate, EventResponse, EventUpdate
+from app.schemas.event import EventCreate, EventResponse, EventUpdate, _drop_tzinfo
 
 router = APIRouter(prefix="/api/events", tags=["events"])
 
@@ -59,13 +59,10 @@ async def update_event(
     updates = data.model_dump(exclude_unset=True)
     if "attendees" in updates:
         updates["attendees"] = [a.model_dump() for a in data.attendees]  # type: ignore[union-attr]
-    # Validate end > start after applying updates
-    # Strip timezone for comparison: SQLite stores naive datetimes
-    def _naive(dt: datetime) -> datetime:
-        return dt.replace(tzinfo=None) if dt.tzinfo else dt
-
-    new_start = _naive(updates.get("start_dt", event.start_dt))
-    new_end = _naive(updates.get("end_dt", event.end_dt))
+    # event.start_dt/end_dt come straight from the ORM (bypassing EventUpdate's
+    # tz-stripping validator), so on PostgreSQL they may still be tz-aware.
+    new_start = updates.get("start_dt", _drop_tzinfo(event.start_dt))
+    new_end = updates.get("end_dt", _drop_tzinfo(event.end_dt))
     if new_end <= new_start:
         raise HTTPException(status_code=422, detail="end_dt must be after start_dt")
     for field, value in updates.items():

@@ -84,19 +84,22 @@ class TestExtractEventsEndpoint:
 
 class TestCombine:
     def test_uses_given_times(self):
-        start, end = document_extraction._combine("2026-03-15", "14:00", "15:30")
+        start, end, all_day = document_extraction._combine("2026-03-15", "14:00", "15:30")
         assert start.isoformat() == "2026-03-15T14:00:00"
         assert end.isoformat() == "2026-03-15T15:30:00"
+        assert all_day is False
 
     def test_falls_back_to_all_day_when_time_missing(self):
-        start, end = document_extraction._combine("2026-03-15", None, None)
+        start, end, all_day = document_extraction._combine("2026-03-15", None, None)
         assert (start.hour, start.minute) == (0, 0)
         assert (end.hour, end.minute) == (23, 59)
+        assert all_day is True
 
     def test_falls_back_to_all_day_when_end_before_start(self):
-        start, end = document_extraction._combine("2026-03-15", "15:00", "14:00")
+        start, end, all_day = document_extraction._combine("2026-03-15", "15:00", "14:00")
         assert (start.hour, start.minute) == (0, 0)
         assert (end.hour, end.minute) == (23, 59)
+        assert all_day is True
 
 
 def _fake_client_factory(payload: dict, stop_reason: str = "end_turn"):
@@ -141,9 +144,11 @@ class TestExtractEventsService:
         assert len(events) == 2
         assert events[0].title == "Sommerfest"
         assert events[0].start_dt.hour == 10
+        assert events[0].all_day is False
         assert events[1].title == "Ferienbeginn"
         assert events[1].start_dt.hour == 0
         assert events[1].end_dt.hour == 23
+        assert events[1].all_day is True
 
     async def test_no_events_found_returns_empty_list(self, tmp_path, monkeypatch):
         monkeypatch.setattr(settings, "anthropic_api_key", "sk-test-dummy")

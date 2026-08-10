@@ -62,7 +62,7 @@ class DocumentExtractionError(Exception):
         super().__init__(detail)
 
 
-def _combine(date_str: str, start_time: str | None, end_time: str | None) -> tuple[datetime, datetime]:
+def _combine(date_str: str, start_time: str | None, end_time: str | None) -> tuple[datetime, datetime, bool]:
     """Baut Start-/End-Datetime. Fehlt eine Uhrzeit (oder ist sie ungültig), wird der
     Termin ganztägig behandelt (00:00-23:59) statt eine Uhrzeit zu raten."""
     day = date_cls.fromisoformat(date_str)
@@ -71,10 +71,10 @@ def _combine(date_str: str, start_time: str | None, end_time: str | None) -> tup
             start = datetime.combine(day, time.fromisoformat(start_time))
             end = datetime.combine(day, time.fromisoformat(end_time))
             if end > start:
-                return start, end
+                return start, end, False
         except ValueError:
             pass
-    return datetime.combine(day, time(0, 0)), datetime.combine(day, time(23, 59))
+    return datetime.combine(day, time(0, 0)), datetime.combine(day, time(23, 59)), True
 
 
 async def extract_events(file_path: Path, content_type: str) -> list[ExtractedEvent]:
@@ -122,6 +122,6 @@ async def extract_events(file_path: Path, content_type: str) -> list[ExtractedEv
     payload = json.loads(text)
     events: list[ExtractedEvent] = []
     for raw in payload.get("events", []):
-        start_dt, end_dt = _combine(raw["date"], raw.get("start_time"), raw.get("end_time"))
-        events.append(ExtractedEvent(title=raw["title"], start_dt=start_dt, end_dt=end_dt))
+        start_dt, end_dt, all_day = _combine(raw["date"], raw.get("start_time"), raw.get("end_time"))
+        events.append(ExtractedEvent(title=raw["title"], start_dt=start_dt, end_dt=end_dt, all_day=all_day))
     return events

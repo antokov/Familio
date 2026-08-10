@@ -19,6 +19,7 @@ interface CandidateRow {
   date: string
   startTime: string
   endTime: string
+  allDay: boolean
   selected: boolean
 }
 
@@ -29,12 +30,14 @@ function toRow(candidate: ExtractedEventCandidate): CandidateRow {
     date: extractDate(candidate.startDt),
     startTime: extractTime(candidate.startDt),
     endTime: extractTime(candidate.endDt),
+    allDay: candidate.allDay,
     selected: true,
   }
 }
 
 function isRowValid(row: CandidateRow): boolean {
-  return row.title.trim().length > 0 && row.startTime < row.endTime
+  if (row.title.trim().length === 0) return false
+  return row.allDay || row.startTime < row.endTime
 }
 
 export function ExtractEventsModal({ filename, candidates, createEvent, onDone, onClose }: ExtractEventsModalProps) {
@@ -62,10 +65,10 @@ export function ExtractEventsModal({ filename, candidates, createEvent, onDone, 
     for (const row of toCreate) {
       const ok = await createEvent({
         title: row.title.trim(),
-        startDt: `${row.date}T${row.startTime}:00`,
-        endDt: `${row.date}T${row.endTime}:00`,
+        startDt: row.allDay ? `${row.date}T00:00:00` : `${row.date}T${row.startTime}:00`,
+        endDt: row.allDay ? `${row.date}T23:59:00` : `${row.date}T${row.endTime}:00`,
         attendees: [],
-        allDay: false,
+        allDay: row.allDay,
       })
       if (ok) created += 1
       setProgress(prev => (prev ? { ...prev, current: prev.current + 1 } : prev))
@@ -124,23 +127,38 @@ export function ExtractEventsModal({ filename, candidates, createEvent, onDone, 
                         disabled={saving}
                         aria-label="Datum"
                       />
-                      <input
-                        type="time"
-                        className={styles.input}
-                        value={row.startTime}
-                        onChange={e => updateRow(row.id, { startTime: e.target.value })}
-                        disabled={saving}
-                        aria-label="Startzeit"
-                      />
-                      <input
-                        type="time"
-                        className={`${styles.input} ${row.selected && !isRowValid(row) ? styles.inputError : ''}`}
-                        value={row.endTime}
-                        onChange={e => updateRow(row.id, { endTime: e.target.value })}
-                        disabled={saving}
-                        aria-label="Endzeit"
-                      />
+                      {row.allDay ? (
+                        <span className={styles.allDayLabel}>Ganztägig</span>
+                      ) : (
+                        <>
+                          <input
+                            type="time"
+                            className={styles.input}
+                            value={row.startTime}
+                            onChange={e => updateRow(row.id, { startTime: e.target.value })}
+                            disabled={saving}
+                            aria-label="Startzeit"
+                          />
+                          <input
+                            type="time"
+                            className={`${styles.input} ${row.selected && !isRowValid(row) ? styles.inputError : ''}`}
+                            value={row.endTime}
+                            onChange={e => updateRow(row.id, { endTime: e.target.value })}
+                            disabled={saving}
+                            aria-label="Endzeit"
+                          />
+                        </>
+                      )}
                     </div>
+                    <label className={styles.allDayToggle}>
+                      <input
+                        type="checkbox"
+                        checked={row.allDay}
+                        onChange={e => updateRow(row.id, { allDay: e.target.checked })}
+                        disabled={saving}
+                      />
+                      Ganztägig
+                    </label>
                   </div>
                 </div>
               ))}

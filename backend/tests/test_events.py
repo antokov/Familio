@@ -187,6 +187,30 @@ class TestAllDay:
         assert resp.json()["all_day"] is False
 
 
+class TestTimezoneNaive:
+    """Uhrzeiten werden als naive Wanduhrzeit behandelt: ein mitgeschicktes 'Z'/Offset
+    darf die Ziffern nicht verschieben (Bug: PostgreSQL taggt timestamptz-Spalten mit
+    der Session-Zeitzone, wodurch das Frontend beim erneuten Parsen fälschlich eine
+    UTC->Lokalzeit-Umrechnung anwendet)."""
+
+    async def test_response_strips_offset_from_input(self, client: AsyncClient):
+        payload = {
+            "title": "Abendschule",
+            "start_dt": "2026-11-10T17:00:00+02:00",
+            "end_dt": "2026-11-10T19:00:00+02:00",
+        }
+        resp = await client.post("/api/events", json=payload)
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["start_dt"] == "2026-11-10T17:00:00"
+        assert data["end_dt"] == "2026-11-10T19:00:00"
+
+    async def test_get_after_create_keeps_same_wallclock(self, client: AsyncClient):
+        event = await create_sample_event(client)
+        resp = await client.get(f"/api/events/{event['id']}")
+        assert resp.json()["start_dt"] == event["start_dt"]
+
+
 class TestDeleteEvent:
     async def test_delete_existing(self, client: AsyncClient):
         event = await create_sample_event(client)

@@ -19,6 +19,7 @@ function eventFromApi(raw: Record<string, unknown>, index: number): ExtractedEve
     title: raw['title'] as string,
     startDt: raw['start_dt'] as string,
     endDt: raw['end_dt'] as string,
+    allDay: (raw['all_day'] as boolean) ?? false,
   }
 }
 

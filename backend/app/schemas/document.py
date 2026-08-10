@@ -23,6 +23,7 @@ class ExtractedEvent(BaseModel):
     title: str
     start_dt: datetime
     end_dt: datetime
+    all_day: bool = False
 
 
 class ExtractEventsResponse(BaseModel):
