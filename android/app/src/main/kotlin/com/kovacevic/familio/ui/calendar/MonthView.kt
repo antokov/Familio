@@ -37,6 +37,7 @@ fun MonthView(
     today: LocalDate,
     onDayClick: (LocalDate) -> Unit,
     onEventClick: (CalendarEvent) -> Unit,
+    onShowMore: (LocalDate) -> Unit,
 ) {
     val firstOfMonth = LocalDate.of(year, month, 1)
     val gridStart = firstOfMonth.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
@@ -69,6 +70,7 @@ fun MonthView(
                         events = eventsByDay[day].orEmpty(),
                         onDayClick = onDayClick,
                         onEventClick = onEventClick,
+                        onShowMore = onShowMore,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -85,6 +87,7 @@ private fun DayCell(
     events: List<CalendarEvent>,
     onDayClick: (LocalDate) -> Unit,
     onEventClick: (CalendarEvent) -> Unit,
+    onShowMore: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -123,6 +126,10 @@ private fun DayCell(
         if (events.size > 2) {
             Text(
                 "+${events.size - 2} mehr",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 1.dp)
+                    .clickable { onShowMore(day) },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -40,6 +40,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.kovacevic.familio.data.model.CalendarEvent
 import com.kovacevic.familio.di.familioContainer
+import com.kovacevic.familio.ui.eventDateRange
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.TextStyle
@@ -70,6 +71,7 @@ fun CalendarScreen(modifier: Modifier = Modifier) {
     var dialogTime by remember { mutableStateOf<String?>(null) }
     var formSaving by remember { mutableStateOf(false) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var dayDetailDate by remember { mutableStateOf<LocalDate?>(null) }
 
     fun openNew(date: LocalDate? = null, time: LocalTime? = null) {
         editingEvent = null
@@ -139,6 +141,7 @@ fun CalendarScreen(modifier: Modifier = Modifier) {
                         today = today,
                         onDayClick = { date -> openNew(date) },
                         onEventClick = { event -> openEdit(event) },
+                        onShowMore = { date -> dayDetailDate = date },
                     )
                 }
                 else -> Box(modifier = Modifier.weight(1f)) {
@@ -184,6 +187,16 @@ fun CalendarScreen(modifier: Modifier = Modifier) {
                     }
                 }
             },
+        )
+    }
+
+    dayDetailDate?.let { date ->
+        DayEventsDialog(
+            date = date,
+            events = uiState.events.filter { date in eventDateRange(it) },
+            onEventClick = { event -> dayDetailDate = null; openEdit(event) },
+            onAddEvent = { dayDetailDate = null; openNew(date) },
+            onDismiss = { dayDetailDate = null },
         )
     }
 }
