@@ -1,53 +1,48 @@
-# Architect Decision — Android-App-Download in den Einstellungen
+# Architect Decision — Termin löschen (Mode A: Pre-Dev Scoping)
 
-## 1. Codebase Scan (relevant excerpt)
+## Summary
 
-- `webapp/src/pages/SettingsPage.tsx` — bestehende Settings-Seite mit zwei `<section>`-Blöcken ("Darstellung", "Familie"), jeweils `styles.section` → `h2.sectionTitle` + `div.card` → `div.settingRow` (Label/Hint links, Control rechts).
-- `webapp/src/pages/SettingsPage.module.css` — Styles für obige Struktur (Tokens: `--space-*`, `--color-*`, `--radius-*`, `--font-size-*`).
-- `webapp/public/downloads/` — existiert bereits im Repo als leeres Verzeichnis (kein `.gitkeep` gefunden, kein Git-Tracking eines leeren Ordners). Die eigentliche `familio.apk` liegt (laut Task) dort, ist aber aktuell **nicht** im Arbeitsverzeichnis vorhanden — muss vom Nutzer manuell nachgelegt werden (Out of Scope für Dev, siehe analysis.md).
-- Vite-Standardverhalten: alles unter `webapp/public/` wird 1:1 nach `/` im Build-Output gemappt — kein `vite.config.ts`-Eingriff nötig. Kein separater Check nötig, `vite.config.ts` unverändert lassen.
-- Kein Backend-Bezug — reines Frontend-Static-Asset + UI.
+Purely additive, frontend-only feature. The backend endpoint (`DELETE /api/events/{event_id}`) already exists and is already tested — do not touch the backend. This closes backlog item **FS-13**.
 
-## 2. Reuse
+## Files Dev Must Touch
 
-- Bestehendes Card-/Section-Pattern aus `SettingsPage.tsx`/`.module.css` wird 1:1 wiederverwendet (dritte `<section>` nach "Familie").
-- Icon-Library `lucide-react` ist bereits Projektabhängigkeit (siehe Imports `Pencil, Trash2, Plus`) — für den neuen Abschnitt bietet sich `Download` oder `Smartphone` aus `lucide-react` an (Design-Entscheidung in Phase 3b).
+1. `webapp/src/hooks/useEvents.ts` — add `deleteEvent(id: string): Promise<boolean>`.
+2. `webapp/src/components/EventFormModal/EventFormModal.tsx` — add an `onDelete` prop (edit-mode only) + inline 2-step delete confirmation.
+3. `webapp/src/components/EventFormModal/EventFormModal.module.css` — styles for the new delete button and its inline confirm row.
+4. `webapp/src/pages/CalendarPage.tsx` — wire `deleteEvent` from the hook into `EventFormModal`'s new `onDelete` prop.
+5. `webapp/src/components/EventFormModal/EventFormModal.test.tsx` — extend with delete-flow tests.
+6. `webapp/src/hooks/useEvents.test.ts` — **new file.** No hook tests exist for `useEvents` today (backlog FS-17 tracks full coverage as a separate, larger follow-up). Scope here is narrow: cover only the new `deleteEvent` function (success, 404-as-success, hard failure), not a full retrofit of `createEvent`/`updateEvent`/`fetchEvents`. Leave FS-17 in the backlog for the rest.
 
-## 3. Files Dev Must Touch
+Do not touch any other file. In particular: no backend changes, no `MonthView`/`WeekView` changes (delete is edit-modal-only per story scope), no new route/page.
 
-1. `webapp/src/pages/SettingsPage.tsx` — neue `<section>` "App" mit Download-Link (`<a href="/downloads/familio.apk" download>`).
-2. `webapp/src/pages/SettingsPage.module.css` — ggf. neue/erweiterte Klassen für den Download-Button, falls das bestehende `settingRow`-Pattern nicht ausreicht (z. B. Button-artige CTA statt reinem Info-Row).
-3. `webapp/src/pages/SettingsPage.test.tsx` — Test ergänzen: neuer Abschnitt vorhanden, Link zeigt auf korrekten `href`, hat `download`-Attribut.
+## Patterns to Follow
 
-Keine weiteren Dateien nötig. Kein Router-/API-/Backend-Code betroffen.
+- **`deleteEvent` shape:** mirror `createEvent`/`updateEvent` in the *same* hook — return `Promise<boolean>`, and update the hook's local `events` array on success (`setEvents(prev => prev.filter(e => e.id !== id))`), not `Promise<void>` like `deleteTask`/`deleteDocument` in other hooks. Stay consistent with the two sibling functions already in this file, not with hooks in other files.
+- **404 = success:** if the DELETE response is `404`, treat it as success (event already gone — filter it locally and return `true`) rather than surfacing an error. Only a genuine failure (network error, 5xx) should return `false`. This follows BA analysis edge case 2.
+- **Confirmation UI:** reuse the app's existing 2-step inline-confirm convention from `TaskItem.tsx`/`TaskItem.module.css` (`confirmRow` / "Löschen?" text / "Ja" / "Nein" buttons) — do **not** introduce `window.confirm()` or a nested modal-in-modal. Re-implement the same interaction shape locally in `EventFormModal` (a local `confirmDelete` boolean state), since `EventFormModal.module.css` already defines its own `.cancelBtn`/`.saveBtn` for the main form actions — new class names must not collide with those (see Constraints).
+- **Error surfacing:** reuse the existing `saveError`-style local state/message pattern already in `EventFormModal` (rendered above `.actions`) for a delete failure, rather than relying on the page-level `error` banner from `useEvents` (that banner is driven by `fetchEvents` and says "Kalender konnte nicht geladen werden", which would be a misleading message for a failed delete). Add a sibling local state, e.g. `deleteError`, with its own short message (e.g. "Löschen fehlgeschlagen. Bitte erneut versuchen.").
+- **CalendarPage wiring:** mirror `handleSave` — on successful delete, call `loadForCurrentView()` (existing refetch-after-mutation pattern already used for create/update) and then `closeModal()`. `EventFormModal`'s `onDelete` prop should be `(id: string) => Promise<boolean>` so the modal can decide whether to close itself or show `deleteError`, matching how `onSave`'s return value already drives `setSaveError` today.
+- **Visibility rule:** the delete action/button renders only when `isEdit` is true (existing `isEdit = !!editEvent` constant already in the component) — never in create mode.
+- **Button disabling while in-flight:** reuse the existing `saving` boolean's spirit — introduce a `deleting` boolean local to `EventFormModal` that disables the confirm ("Ja") button and the rest of the form's primary actions while a delete request is in flight, preventing double-submit (BA edge case 1). It does not need to disable the whole form the way `saving` does for save, only needs to prevent a second delete from firing — keep this minimal.
 
-## 4. Patterns Dev Must Follow
+## Explicit Constraints (What NOT to Do)
 
-- Gleiche Section-/Card-Struktur wie bestehende Abschnitte (`styles.section`, `styles.sectionTitle`, `styles.card`).
-- CSS ausschließlich über bestehende Design-Tokens aus `webapp/src/styles/tokens.css` (keine Hex-Werte hardcoden).
-- Reines statisches `<a>`-Tag für den Download — **kein** `fetch`/Blob-Download, kein JS-Klick-Handler nötig (Business Rule 3 in analysis.md).
-- Deutsche UI-Texte (Projektkonvention, siehe restliche Settings-Seite: "Darstellung", "Familie", "Mitglied hinzufügen").
-- Test-Datei folgt bestehendem Muster in `SettingsPage.test.tsx` (React Testing Library, siehe vorhandene Tests für Struktur/Query-Stil).
+- Do NOT modify `backend/app/routers/events.py`, `backend/app/schemas/event.py`, or `backend/tests/test_events.py` — the DELETE endpoint and its tests are already complete and correct for this story.
+- Do NOT add delete affordances to `MonthView`/`WeekView` event pills directly — deletion is edit-modal-only in this story (see story.md "Out of Scope").
+- Do NOT introduce `window.confirm()`/`window.alert()` anywhere.
+- Do NOT reuse `TaskItem.module.css` classes directly across component boundaries (CSS Modules are scoped per-component in this codebase — every existing component defines its own copies of shared visual patterns, e.g. `.cancelBtn` exists separately in both `TaskItem.module.css` and `EventFormModal.module.css`). Add new, distinctly-named classes inside `EventFormModal.module.css` (e.g. `deleteConfirmRow`, `deleteConfirmBtn`, `deleteConfirmCancelBtn`, `deleteBtn`) — do not rename or repurpose the modal's existing `.cancelBtn`/`.saveBtn`, which remain the "Abbrechen"/"Speichern" buttons.
+- Do NOT add recurrence-aware deletion logic — `calendar_events` has no recurrence concept (unlike `tasks`).
+- Do NOT expand scope to a full `useEvents` test retrofit (FS-17) — only test the new `deleteEvent` function.
 
-## 5. Explicit Constraints (What NOT to do)
+## Files Dev Needs in Context (max 8)
 
-- **NICHT** die eigentliche `familio.apk`-Binärdatei erzeugen oder committen — das ist ein manueller Nutzer-Schritt außerhalb dieses Story-Durchlaufs.
-- **NICHT** `react-router-dom`-`<Link>` oder `navigate()` für den Download verwenden — SPA-Navigation ist hier falsch, es muss ein natives `<a href="..." download>` sein.
-- **NICHT** User-Agent-Sniffing oder Plattform-Erkennung einbauen (Out of Scope laut PO).
-- **KEINE** Versions-/Update-Logik, kein Änderungen an `vite.config.ts`.
-- **KEINE** Änderungen an der Android-App (`android/`) — Feature ist auf die Webapp-Settings-Seite beschränkt.
-- Bestehende zwei Sections ("Darstellung", "Familie") nicht umbauen, nur um eine dritte ergänzen.
+1. `webapp/src/hooks/useEvents.ts`
+2. `webapp/src/components/EventFormModal/EventFormModal.tsx`
+3. `webapp/src/components/EventFormModal/EventFormModal.module.css`
+4. `webapp/src/pages/CalendarPage.tsx`
+5. `webapp/src/components/TaskItem/TaskItem.tsx` (reference only — confirm-flow pattern to mirror)
+6. `webapp/src/components/TaskItem/TaskItem.module.css` (reference only — class shapes to mirror, not import)
+7. `webapp/src/components/EventFormModal/EventFormModal.test.tsx`
+8. `webapp/src/types/event.ts`
 
-## 6. Files Dev Needs in Context (max 5–8)
-
-1. `webapp/src/pages/SettingsPage.tsx`
-2. `webapp/src/pages/SettingsPage.module.css`
-3. `webapp/src/pages/SettingsPage.test.tsx`
-4. `webapp/src/styles/tokens.css` (Tokens nachschlagen)
-5. `.claude/workspace/story.md`
-6. `.claude/workspace/analysis.md`
-7. `.claude/workspace/design-decision.md` (folgt in Phase 3b)
-
-## Blocker Check
-
-Keine Architektur-Risiken, die eine menschliche Entscheidung erfordern (kein neuer Backend-Layer, keine neue Abhängigkeit, kein DB-Schema-Change). Weiter zu Phase 3b (Design), da `webapp/src/` betroffen ist.
+No blockers — this is a small, additive, well-precedented change. Proceeding to Design phase (Phase 3b applies — `webapp/src/` files are in scope).

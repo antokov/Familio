@@ -1,39 +1,32 @@
-# User Story — Android-App-Download in den Einstellungen
+# User Story
 
-**As a** Familienmitglied, das die Webapp nutzt
-**I want** in den Einstellungen einen Download-Link für die native Android-App finden
-**So that** ich die App auf mein Android-Gerät installieren kann, ohne die APK-Datei manuell suchen zu müssen
+**Type:** Business Feature
 
----
+## Story
+As a family member using the Familio calendar,
+I want to delete a calendar event I no longer need,
+so that outdated or wrongly created appointments don't clutter the shared family calendar.
 
 ## Acceptance Criteria
 
-1. **Given** ich bin auf der Einstellungen-Seite der Webapp,
-   **When** die Seite geladen ist,
-   **Then** sehe ich einen neuen Abschnitt "App" (o.ä.) mit einem Button/Link "Android-App herunterladen".
+**AC1:** Given I open an existing calendar event for editing, when I look at the edit dialog, then I see a "Löschen" (delete) action.
 
-2. **Given** der Download-Bereich ist sichtbar,
-   **When** ich auf "Android-App herunterladen" klicke,
-   **Then** startet der Download von `/downloads/familio.apk` (bzw. wird die Datei in einem neuen Tab geöffnet, je nach Browser-Verhalten), ohne dass die Seite neu geladen oder die SPA-Navigation ausgelöst wird.
+**AC2:** Given I click "Löschen" on an existing event, when I have not yet confirmed, then the event is NOT deleted yet and I am asked to confirm the action.
 
-3. **Given** die APK-Datei liegt unter `webapp/public/downloads/familio.apk`,
-   **When** die Webapp gebaut/deployed wird (Vite `public/`-Verzeichnis),
-   **Then** ist die Datei unverändert unter `/downloads/familio.apk` erreichbar (Vite kopiert `public/`-Inhalte 1:1 ins Build-Output).
+**AC3:** Given I confirm the delete action, when the deletion succeeds, then the event disappears from the calendar view (Month and Week) immediately and the edit dialog closes.
 
-4. **Given** ich nutze bereits die native Android-App,
-   **When** ich den Download-Link in der Webapp sehe,
-   **Then** ist klar erkennbar, dass es sich um die Android-App handelt (z. B. Hinweistext/Icon), damit iOS-/Desktop-Nutzer nicht verwirrt werden.
+**AC4:** Given I click "Löschen" by accident, when I cancel the confirmation instead of confirming, then the event is kept unchanged and the edit dialog stays open.
 
-5. **Given** Darstellung im Light- und Dark-Theme,
-   **When** ich den neuen Settings-Abschnitt betrachte,
-   **Then** folgt er optisch den bestehenden Settings-Karten (gleiche Tokens, gleicher Card-Stil wie "Darstellung"/"Familie").
-
----
+**AC5:** Given the delete request fails (e.g. network/server error), when the error occurs, then I see an error message and the event is NOT silently removed from my view.
 
 ## Out of Scope
+- Deleting multiple events at once (bulk delete)
+- Deleting a single occurrence of a recurring event (Familio calendar events are not recurring today — no recurrence concept exists for `calendar_events`, unlike Tasks)
+- Undo/restore of a deleted event
+- Deleting events directly from the Month/Week view without opening the edit dialog (e.g. swipe-to-delete)
+- Android app (web-only in this iteration, consistent with prior calendar features)
 
-- Kein automatisches Erkennen der Nutzer-Plattform (z. B. User-Agent-Sniffing, um den Button nur auf Android-Geräten anzuzeigen) — der Link wird immer angezeigt.
-- Kein Versions-/Update-Hinweis (z. B. "Version 1.2.3", Changelog, Update-Notification bei neuer APK) — reiner statischer Download-Link.
-- Kein automatisierter Build-/Upload-Prozess, der die APK bei jedem Release automatisch nach `webapp/public/downloads/` kopiert — die Datei wird weiterhin manuell dort abgelegt.
-- Keine Änderung an der Android-App selbst (kein In-App-Update-Check).
-- Kein Download-Zähler oder Analytics-Tracking für den Klick.
+## Notes
+- The backend already exposes `DELETE /api/events/{event_id}` (implemented, tested, unused by any frontend caller today).
+- This closes existing backlog item **FS-13: "Termin löschen — DELETE-Button im Edit-Modal"**.
+- The app already has an established 2-step inline delete-confirmation pattern (`TaskItem`) — BA/Architect should evaluate whether that exact pattern fits inside a modal footer or whether a lighter confirm-inline-in-modal approach is more appropriate.

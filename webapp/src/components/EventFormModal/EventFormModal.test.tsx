@@ -16,7 +16,7 @@ const baseEvent: CalendarEvent = {
   createdAt: '2024-01-01T00:00:00',
 }
 
-function renderModal(event?: CalendarEvent) {
+function renderModal(event?: CalendarEvent, onDelete?: (id: string) => Promise<boolean>) {
   const onSave = vi.fn().mockResolvedValue(true)
   const onClose = vi.fn()
   render(
@@ -24,6 +24,7 @@ function renderModal(event?: CalendarEvent) {
       editEvent={event}
       familyMembers={MOCK_FAMILY}
       onSave={onSave}
+      onDelete={onDelete}
       onClose={onClose}
     />
   )
@@ -214,5 +215,98 @@ describe('EventFormModal — Mehrtägig', () => {
     await user.type(screen.getByLabelText('Titel *'), 'Feiertag')
     await user.click(screen.getByLabelText('Ganztägig'))
     expect(screen.getByRole('button', { name: 'Erstellen' })).not.toBeDisabled()
+  })
+})
+
+describe('EventFormModal — Termin löschen', () => {
+  it('zeigt keinen Löschen-Button bei neuem Termin', () => {
+    renderModal(undefined, vi.fn())
+    expect(screen.queryByLabelText('Termin löschen')).not.toBeInTheDocument()
+  })
+
+  it('zeigt keinen Löschen-Button, wenn kein onDelete übergeben wird', () => {
+    renderModal(baseEvent)
+    expect(screen.queryByLabelText('Termin löschen')).not.toBeInTheDocument()
+  })
+
+  it('zeigt den Löschen-Button bei bestehendem Termin mit onDelete', () => {
+    renderModal(baseEvent, vi.fn())
+    expect(screen.getByLabelText('Termin löschen')).toBeInTheDocument()
+  })
+
+  it('fragt nach Bestätigung, bevor gelöscht wird', async () => {
+    const user = userEvent.setup()
+    const onDelete = vi.fn().mockResolvedValue(true)
+    renderModal(baseEvent, onDelete)
+
+    await user.click(screen.getByLabelText('Termin löschen'))
+
+    expect(screen.getByText('Termin löschen?')).toBeInTheDocument()
+    expect(onDelete).not.toHaveBeenCalled()
+  })
+
+  it('löscht nichts und zeigt den Löschen-Button wieder, wenn die Bestätigung abgebrochen wird', async () => {
+    const user = userEvent.setup()
+    const onDelete = vi.fn().mockResolvedValue(true)
+    renderModal(baseEvent, onDelete)
+
+    await user.click(screen.getByLabelText('Termin löschen'))
+    await user.click(screen.getByRole('button', { name: 'Löschen abbrechen' }))
+
+    expect(onDelete).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Termin löschen')).toBeInTheDocument()
+  })
+
+  it('ruft onDelete mit der Termin-ID auf und schließt danach, wenn bestätigt wird', async () => {
+    const user = userEvent.setup()
+    const onDelete = vi.fn().mockResolvedValue(true)
+    const { onClose } = renderModal(baseEvent, onDelete)
+
+    await user.click(screen.getByLabelText('Termin löschen'))
+    await user.click(screen.getByRole('button', { name: 'Ja, löschen' }))
+
+    expect(onDelete).toHaveBeenCalledWith('1')
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('zeigt eine Fehlermeldung und schließt nicht, wenn das Löschen fehlschlägt', async () => {
+    const user = userEvent.setup()
+    const onDelete = vi.fn().mockResolvedValue(false)
+    const { onClose } = renderModal(baseEvent, onDelete)
+
+    await user.click(screen.getByLabelText('Termin löschen'))
+    await user.click(screen.getByRole('button', { name: 'Ja, löschen' }))
+
+    expect(screen.getByText('Löschen fehlgeschlagen. Bitte erneut versuchen.')).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('deaktiviert die Bestätigungs-Buttons während des Löschens, sodass ein Doppel-Klick keinen zweiten Aufruf auslöst', async () => {
+    const user = userEvent.setup()
+    let resolveDelete: (ok: boolean) => void = () => {}
+    const onDelete = vi.fn(() => new Promise<boolean>(resolve => { resolveDelete = resolve }))
+    renderModal(baseEvent, onDelete)
+
+    await user.click(screen.getByLabelText('Termin löschen'))
+    const confirmBtn = screen.getByRole('button', { name: 'Ja, löschen' })
+    await user.click(confirmBtn)
+
+    expect(confirmBtn).toBeDisabled()
+    await user.click(confirmBtn)
+    expect(onDelete).toHaveBeenCalledTimes(1)
+
+    resolveDelete(true)
+  })
+
+  it('schließt das gesamte Modal ohne zu löschen, wenn während der Bestätigung "Abbrechen" (Formular) geklickt wird', async () => {
+    const user = userEvent.setup()
+    const onDelete = vi.fn().mockResolvedValue(true)
+    const { onClose } = renderModal(baseEvent, onDelete)
+
+    await user.click(screen.getByLabelText('Termin löschen'))
+    await user.click(screen.getByRole('button', { name: 'Abbrechen' }))
+
+    expect(onDelete).not.toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalled()
   })
 })

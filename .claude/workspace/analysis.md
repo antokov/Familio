@@ -1,29 +1,34 @@
-# BA Analysis — Android-App-Download in den Einstellungen
+# BA Analysis — Termin löschen
 
 ## 1. Business Rules
 
-1. Der Download-Link zeigt immer auf den statischen Pfad `/downloads/familio.apk` (relativ zur Webapp-Origin) — kein API-Call, keine Backend-Beteiligung.
-2. Vite kopiert alles unter `webapp/public/` unverändert in den Build-Output (`dist/`) unter dem gleichen relativen Pfad. `webapp/public/downloads/familio.apk` → `/downloads/familio.apk` zur Laufzeit. Kein Build-Schritt nötig.
-3. Der Link/Button muss ein natives `<a href="/downloads/familio.apk" download>`-Element sein (kein `<button onClick={() => navigate(...)}>`), damit der Browser den Download auslöst statt React-Router-Navigation zu versuchen.
-4. Der neue Abschnitt fügt sich als weitere `<section>` in `SettingsPage.tsx` ein, analog zu "Darstellung" und "Familie" (gleiche Card-/Section-Struktur, `styles.section` / `styles.card` / `styles.settingRow`).
-5. Es gibt keinen Bezug zu Familienmitgliedern oder Auth — der Abschnitt ist statisch und für alle Nutzer identisch sichtbar.
+1. A delete action is only available for an **existing** event (edit mode) — a new/unsaved event has nothing to delete.
+2. Deleting requires an explicit confirmation step before any DELETE request is sent (AC2/AC4).
+3. On successful deletion, the event is removed from the in-memory event list immediately (no refetch required) so Month/Week views update instantly, and the edit dialog closes.
+4. On a failed deletion (non-2xx, network error), the event stays in the list, the modal stays open, and the user sees an error message (AC5) — mirrors the existing `saveError` pattern already used for create/update in `EventFormModal`.
+5. Deletion is permanent — no soft-delete/undo, consistent with how `DELETE` already behaves for tasks, shopping items, documents, and family members.
+6. No authorization check — the app has no auth/user roles (per CLAUDE.md), so any family member can delete any event, same as every other mutation in the app today.
+7. All-day and multi-day events are deleted the same way as timed events — deletion is purely by `id`, `all_day`/date range is irrelevant.
 
 ## 2. Edge Cases
 
-1. **APK-Datei fehlt zur Laufzeit** (z. B. lokal noch nicht abgelegt, oder beim Deployment vergessen): Klick auf den Link führt zu einem Browser-eigenen 404 (kein Custom-Error-Handling nötig/möglich bei einem reinen `<a>`-Tag). Aktuell (Stand dieser Story) existiert `webapp/public/downloads/` bereits als Verzeichnis, aber **ohne** `familio.apk` — muss vom Nutzer manuell nachgelegt werden. Nicht blockierend für die Implementierung, aber der Download funktioniert erst, sobald die Datei tatsächlich da liegt.
-2. **Browser-Verhalten bei `download`-Attribut:** Manche mobile Browser (v. a. iOS Safari) ignorieren `download` und öffnen die Datei stattdessen inline/in neuem Tab. Kein Blocker — akzeptables Verhalten, da die Zielgruppe (Android-Nutzer) korrekt bedient wird.
-3. **Dark/Light Theme:** Neuer Abschnitt muss bestehende CSS-Tokens nutzen, kein Hardcoding von Farben.
-4. **Lange Dateigröße / langsame Verbindung:** Kein spezielles Loading-UI nötig — natives Browser-Download-Verhalten reicht (kein Fetch/Blob-Download nötig, da es sich um einen einfachen statischen Link handelt).
-5. **Sicherheitsaspekt:** Da `familio.apk` unsigniert sein könnte, kein Anti-Virus-Scan o.ä. im Scope — reine Bereitstellung, kein Signierungs-/Vertrauens-Handling in dieser Story.
+1. **Double-submit:** user double-clicks the confirm button while a delete request is in flight → must not fire two `DELETE` requests. Mitigate by disabling the confirm control while a `deleting` state is true (same shape as the existing `saving` state used for create/update).
+2. **Already deleted (404):** two family members could have the event open at once; if a second delete/edit hits a `404` (event already gone — this path is already covered by `test_delete_nonexistent_returns_404` on the backend), treat it as an effectively successful outcome from the user's point of view — remove it locally and close the modal rather than showing a scary error, since the end state the user wants (event gone) is already true.
+3. **Cancel confirmation:** clicking "Nein"/cancel on the delete confirmation must not delete anything and must leave the edit modal open and untouched. Dismissing the whole modal (backdrop click / X / "Abbrechen") while the delete-confirm is showing should behave like closing the modal normally (no deletion).
+4. **All-day / multi-day events:** no special-casing needed — single `id`-based DELETE regardless of `allDay`/date span.
+5. **Empty calendar after delete:** deleting the last event in view should leave Month/Week view in the same empty state they already render for a day/period with 0 events (no new empty-state work needed, existing rendering already handles 0 events per day).
 
 ## 3. Data Model Implications
 
-- Keine. Keine neuen DB-Felder, keine neuen API-Endpunkte, keine neuen Pydantic-Schemas. Rein statisches Frontend-Asset + UI-Element in `webapp/src/pages/SettingsPage.tsx` und `SettingsPage.module.css`.
+**None.** No new DB fields, no new backend endpoint. `DELETE /api/events/{event_id}` already exists in `backend/app/routers/events.py`, is already tested (`backend/tests/test_events.py::TestDeleteEvent`), and needs no changes.
+
+Frontend-only additions:
+- New `deleteEvent(id: string): Promise<boolean>` in `webapp/src/hooks/useEvents.ts` (same shape/pattern as `deleteTask`/`deleteDocument`/`deleteFamilyMember` in sibling hooks — fetch DELETE, on success filter local state, on failure set an error and return `false`).
+- New `onDelete` wiring: `EventFormModal` gets an `onDelete` prop (only relevant/rendered in edit mode) that `CalendarPage` implements by calling `deleteEvent(editingEvent.id)`.
 
 ## 4. Open Questions
 
-1. *(NON-BLOCKING)* Soll der Link zusätzlich in der Android-App selbst angezeigt werden (z. B. Settings-Screen dort, um Familienmitgliedern ohne die App den Link teilen zu lassen)? — Da die Android-App die APK nicht sinnvoll "für sich selbst" anbieten muss (wer sie nutzt, hat sie bereits), wird das als Out-of-Scope behandelt (siehe story.md). Dev kann optional einen Hinweistext einbauen, ist aber nicht Teil der AC.
-2. *(NON-BLOCKING)* Soll der Abschnitt einen Hinweis wie "nur für Android" oder ein Android-Icon bekommen? Empfehlung: ja (AC 4), aber genaue Formulierung/Icon ist Design-Entscheidung, nicht BA-Scope.
-3. *(NON-BLOCKING)* Muss die tatsächliche `familio.apk`-Datei in diesem Story-Durchlauf abgelegt werden? Nein — das Repository hat bereits `webapp/public/downloads/` als Verzeichnis; das Ablegen der eigentlichen Binärdatei ist ein manueller Deployment-Schritt außerhalb des Code-Reviews (Binärdatei im Git-Repo ist ohnehin fraglich, siehe Architect-Phase für Empfehlung zu `.gitignore`).
+- **OQ-NB-1 (NON-BLOCKING):** Confirmation UI style — 2-step inline swap (matches `TaskItem`'s existing "Löschen?" / "Ja" / "Nein" pattern) vs. a dedicated warning banner inside the modal. No native `window.confirm()` is used anywhere else in the app, so it should not be introduced here either. → Architect/Design to decide, but must reuse the established inline 2-step convention rather than inventing a new modal-in-modal.
+- **OQ-NB-2 (NON-BLOCKING):** Whether the delete button lives in the modal footer (next to Abbrechen/Speichern) or near the header (next to the close X). → Design decision, no business impact.
 
-Keine BLOCKING-Fragen. Weiter zu Phase 3 (Architect).
+No BLOCKING questions. Proceeding to Architect phase.

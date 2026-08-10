@@ -172,9 +172,15 @@
 /* Action row */
 .actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: var(--space-3);
   padding-top: var(--space-2);
+}
+
+.primaryActions {
+  display: flex;
+  gap: var(--space-3);
+  margin-left: auto;
 }
 
 .cancelBtn {
@@ -207,6 +213,74 @@
 }
 
 .saveBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Delete */
+.deleteTriggerBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.deleteTriggerBtn:hover {
+  background-color: rgba(212, 98, 58, 0.12);
+  color: var(--color-accent);
+}
+
+.deleteConfirmRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.deleteConfirmText {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.deleteConfirmBtn {
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  background-color: var(--color-accent);
+  color: #fff;
+  transition: opacity 0.15s ease;
+}
+
+.deleteConfirmBtn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.deleteConfirmBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.deleteConfirmCancelBtn {
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background-color: var(--color-surface-alt);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.deleteConfirmCancelBtn:hover:not(:disabled) {
+  background-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.deleteConfirmCancelBtn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }

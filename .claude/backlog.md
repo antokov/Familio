@@ -23,7 +23,6 @@
 - [ ] FS-09: Alembic-Migrationen einrichten (für PostgreSQL/NAS-Deployment; ersetzt `create_all` im lifespan) — **kritisch:** ohne Alembic führt jede neue Spalte zu 500-Fehlern auf bestehenden DBs (aufgetreten: completed_at in tasks)
 - [ ] FS-10: camelCase-Aliases in Pydantic-Schemas für Frontend-Kompatibilität (`dueDate`, `assigneeInitials` etc.)
 - [ ] FS-11: Recurrence-Logik (getNextDueDate) in `backend/app/services/tasks.py` extrahieren
-- [ ] FS-13: Termin löschen — DELETE-Button im Edit-Modal
 - [ ] FS-21: `eventsByDay` in `WeekView.tsx` verwendet `ev.startDt.slice(0,10)` — auf `new Date()` umstellen (gleiche Fragility wie TD-05, introduced in: FS-15, file: `webapp/src/components/WeekView/WeekView.tsx`)
 - [ ] FS-16: Render-Tests für MonthView, WeekView, EventFormModal, CalendarPage — **teilweise erledigt:** `EventFormModal` (Edit-Vorausfüllen + Ganztägig-/Mehrtägig-Verhalten), `WeekView` (Ganztägig-Zeile + Mehrtägig) und `MonthView` (Eintägig/Mehrtägig, neu via "Mehrtägige Termine") haben jetzt Render-Tests; nur `CalendarPage` weiterhin ungetestet
 - [ ] FS-17: useEvents Hook-Tests (API-Mock via MSW oder vi.fn)
@@ -51,6 +50,7 @@
 ## 🏛️ Architecture Log
 <!-- One-line per feature: key structural decision made -->
 <!-- Format: - [Feature Name]: summary of decision -->
+- [Termin löschen]: **Reines Frontend-Feature, keine Backend-Änderung** — `DELETE /api/events/{event_id}` existierte bereits vollständig getestet, aber ungenutzt (FS-13). `useEvents.deleteEvent()` folgt exakt dem `createEvent`/`updateEvent`-Muster derselben Datei (`Promise<boolean>`, lokales State-Filtering statt Refetch-Pflicht); ein `404`-Response wird bewusst wie Erfolg behandelt (Termin ist ohnehin schon weg). `EventFormModal` bekommt einen optionalen `onDelete`-Prop, nur im Edit-Modus gerendert; 2-stufige Inline-Bestätigung nach dem etablierten `TaskItem`-Muster (kein `window.confirm()`, kein verschachteltes Modal) — CSS-Klassen bewusst neu benannt (`deleteConfirmBtn` etc.) statt `TaskItem.module.css`-Klassen zu teilen, da CSS Modules in dieser Codebase strikt pro Komponente skopiert sind. Footer-Layout: `.actions` verzichtet jetzt auf `justify-content`, ein neuer `.primaryActions`-Wrapper mit `margin-left: auto` hält Abbrechen/Speichern immer rechtsbündig, unabhängig davon ob der Löschen-Button gerendert wird (vermeidet Single-Child-`space-between`-Kollaps). `aria-label="Löschen abbrechen"` disambiguiert den Inline-Cancel vom Haupt-"Abbrechen"-Button für Screenreader/Tests.
 - [WebApp Grundgerüst]: Vite + React 18 + react-router-dom v6 Layout-Route; Dark/Light via `data-theme` auf `<html>`; CSS Modules + Custom Properties; kein UI-Framework
 - [Design-Redesign]: Nunito-Font, Forest-Green Primary (#2E6B4A), Warm-Linen Background (#F5F3EF); DashboardWidget-Component; kreisförmige Checkbox als Signature-Element
 - [Aufgaben-Feature]: useTasks Hook + localStorage (analog useTheme); getNextDueDate als pure fn (testbar ohne React); TaskItem/TaskFormModal als named exports; DashboardPage auf echte useTasks-Daten umgestellt
@@ -112,3 +112,4 @@
 - [x] FS-25: Einkaufsliste API-Backend — Backend 18 Tests, Frontend 108 Tests (+ 15 localStorage-Tests unverändert); `checked_at` server-controlled (resolved in: FS-25)
 - [x] FS-26: AvatarBadge CSS-Module-Hash — `classNameStrategy: 'non-scoped'` in vite.config.ts; 15/15 AvatarBadge-Tests grün (resolved in: FS-22 Nebeneffekt)
 - [x] FS-27: Persistentes Coolify-Volume auf `/app/uploads` eingerichtet — Directory Mount (kein named Volume) auf Host-Server `milkyway`, Source `/mnt/data/familio/uploads` (HDD, `sdb1`) statt SSD-System-Disk (`sda`); Redeploy überlebt jetzt (resolved in: Deployment-Setup)
+- [x] FS-13: Termin löschen — DELETE-Button (2-stufige Inline-Bestätigung) im `EventFormModal`-Edit-Modus; `useEvents.deleteEvent()` neu; Backend-Endpoint existierte bereits unverändert (resolved in: Termin löschen)

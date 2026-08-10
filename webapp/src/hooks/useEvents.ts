@@ -80,5 +80,17 @@ export function useEvents() {
     }
   }, [])
 
-  return { events, loading, error, fetchEvents, createEvent, updateEvent }
+  const deleteEvent = useCallback(async (id: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/api/events/${id}`, { method: 'DELETE' })
+      // 404 means the event is already gone — the desired end state already holds.
+      if (!res.ok && res.status !== 404) throw new Error(`HTTP ${res.status}`)
+      setEvents(prev => prev.filter(ev => ev.id !== id))
+      return true
+    } catch {
+      return false
+    }
+  }, [])
+
+  return { events, loading, error, fetchEvents, createEvent, updateEvent, deleteEvent }
 }

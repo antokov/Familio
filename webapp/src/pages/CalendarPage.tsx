@@ -38,7 +38,7 @@ export default function CalendarPage() {
   const [modalDate, setModalDate] = useState<string | undefined>()
   const [modalTime, setModalTime] = useState<string | undefined>()
 
-  const { events, loading, error, fetchEvents, createEvent, updateEvent } = useEvents()
+  const { events, loading, error, fetchEvents, createEvent, updateEvent, deleteEvent } = useEvents()
   const { members: familyMembers } = useFamilyMembers()
 
   const loadForCurrentView = useCallback(() => {
@@ -97,6 +97,12 @@ export default function CalendarPage() {
       return ok
     }
     const ok = await createEvent(input)
+    if (ok) loadForCurrentView()
+    return ok
+  }
+
+  async function handleDelete(id: string): Promise<boolean> {
+    const ok = await deleteEvent(id)
     if (ok) loadForCurrentView()
     return ok
   }
@@ -185,6 +191,7 @@ export default function CalendarPage() {
           initialDate={modalDate}
           initialTime={modalTime}
           onSave={handleSave}
+          onDelete={editingEvent ? handleDelete : undefined}
           onClose={closeModal}
         />
       )}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { X } from 'lucide-react'
+import { X, Trash2 } from 'lucide-react'
 import { AvatarBadge } from '../AvatarBadge/AvatarBadge'
 import type { CalendarEvent, CreateEventInput, Attendee } from '../../types/event'
 import type { FamilyMember } from '../../types/family'
@@ -11,6 +11,7 @@ interface EventFormModalProps {
   initialDate?: string
   initialTime?: string
   onSave: (input: CreateEventInput) => Promise<boolean>
+  onDelete?: (id: string) => Promise<boolean>
   onClose: () => void
 }
 
@@ -24,7 +25,7 @@ export function extractTime(isoStr: string): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-export function EventFormModal({ editEvent, familyMembers, initialDate, initialTime, onSave, onClose }: EventFormModalProps) {
+export function EventFormModal({ editEvent, familyMembers, initialDate, initialTime, onSave, onDelete, onClose }: EventFormModalProps) {
   const today = new Date().toISOString().slice(0, 10)
   const isEdit = !!editEvent
 
@@ -48,9 +49,25 @@ export function EventFormModal({ editEvent, familyMembers, initialDate, initialT
   const [allDay, setAllDay] = useState(editEvent?.allDay ?? false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(false)
 
   const titleRef = useRef<HTMLInputElement>(null)
   useEffect(() => { titleRef.current?.focus() }, [])
+
+  async function handleDeleteConfirm() {
+    if (!editEvent || !onDelete) return
+    setDeleting(true)
+    setDeleteError(false)
+    const ok = await onDelete(editEvent.id)
+    if (ok) {
+      onClose()
+    } else {
+      setDeleting(false)
+      setDeleteError(true)
+    }
+  }
 
   function toggleAttendee(initials: string, color: string) {
     setAttendees(prev =>
@@ -247,14 +264,52 @@ export function EventFormModal({ editEvent, familyMembers, initialDate, initialT
           {saveError && (
             <p className={styles.saveError}>Speichern fehlgeschlagen. Bitte erneut versuchen.</p>
           )}
+          {deleteError && (
+            <p className={styles.saveError}>Löschen fehlgeschlagen. Bitte erneut versuchen.</p>
+          )}
 
           <div className={styles.actions}>
-            <button type="button" className={styles.cancelBtn} onClick={onClose}>
-              Abbrechen
-            </button>
-            <button type="submit" className={styles.saveBtn} disabled={!isValid || saving}>
-              {saving ? 'Speichert…' : isEdit ? 'Speichern' : 'Erstellen'}
-            </button>
+            {isEdit && onDelete && (
+              confirmDelete ? (
+                <div className={styles.deleteConfirmRow}>
+                  <span className={styles.deleteConfirmText}>Termin löschen?</span>
+                  <button
+                    type="button"
+                    className={styles.deleteConfirmBtn}
+                    onClick={() => void handleDeleteConfirm()}
+                    disabled={deleting}
+                  >
+                    Ja, löschen
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.deleteConfirmCancelBtn}
+                    onClick={() => setConfirmDelete(false)}
+                    disabled={deleting}
+                    aria-label="Löschen abbrechen"
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className={styles.deleteTriggerBtn}
+                  onClick={() => setConfirmDelete(true)}
+                  aria-label="Termin löschen"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )
+            )}
+            <div className={styles.primaryActions}>
+              <button type="button" className={styles.cancelBtn} onClick={onClose}>
+                Abbrechen
+              </button>
+              <button type="submit" className={styles.saveBtn} disabled={!isValid || saving}>
+                {saving ? 'Speichert…' : isEdit ? 'Speichern' : 'Erstellen'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
