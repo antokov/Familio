@@ -1,11 +1,15 @@
 package com.kovacevic.familio.ui.documents
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -63,6 +67,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import coil3.compose.AsyncImage
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import com.kovacevic.familio.data.model.Document
 import com.kovacevic.familio.di.familioContainer
 import com.kovacevic.familio.ui.components.AvatarBadge
@@ -83,10 +90,12 @@ fun DocumentsScreen(modifier: Modifier = Modifier) {
         },
     )
     val uiState by viewModel.uiState.collectAsState()
+    LaunchedEffect(Unit) { viewModel.loadDocuments() }
     val scope = rememberCoroutineScope()
 
     var pickedUri by remember { mutableStateOf<Uri?>(null) }
     var pickedName by remember { mutableStateOf<String?>(null) }
+    var pickedIsScan by remember { mutableStateOf(false) }
     var showUploadDialog by remember { mutableStateOf(false) }
     var uploading by remember { mutableStateOf(false) }
     var uploadError by remember { mutableStateOf<String?>(null) }
@@ -96,10 +105,31 @@ fun DocumentsScreen(modifier: Modifier = Modifier) {
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
             pickedUri = uri
+            pickedIsScan = false
             pickedName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
                 val idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
                 if (cursor.moveToFirst() && idx >= 0) cursor.getString(idx) else null
             } ?: uri.lastPathSegment
+        }
+    }
+
+    val documentScanner = remember {
+        val options = GmsDocumentScannerOptions.Builder()
+            .setGalleryImportAllowed(false)
+            .setPageLimit(5)
+            .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_PDF)
+            .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+            .build()
+        GmsDocumentScanning.getClient(options)
+    }
+    val scanLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val scanResult = GmsDocumentScanningResult.fromActivityResultIntent(result.data)
+            scanResult?.pdf?.let { pdf ->
+                pickedUri = pdf.uri
+                pickedIsScan = true
+                pickedName = "Scan (${pdf.pageCount} Seite${if (pdf.pageCount == 1) "" else "n"})"
+            }
         }
     }
 
@@ -109,6 +139,7 @@ fun DocumentsScreen(modifier: Modifier = Modifier) {
             FloatingActionButton(onClick = {
                 pickedUri = null
                 pickedName = null
+                pickedIsScan = false
                 uploadError = null
                 showUploadDialog = true
             }) {
@@ -125,20 +156,35 @@ fun DocumentsScreen(modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.error,
                 )
                 uiState.documents.isEmpty() -> EmptyDocumentsHint()
-                else -> LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    items(uiState.documents, key = { it.id }) { doc ->
-                        DocumentRow(
-                            doc = doc,
-                            familyMembers = uiState.familyMembers,
-                            confirmingDelete = confirmDeleteId == doc.id,
-                            onOpenPreview = { previewDoc = doc },
-                            onReassign = { memberId -> viewModel.reassignDocument(doc.id, memberId) },
-                            onDownload = { viewModel.downloadDocument(doc) },
-                            onRequestDelete = { confirmDeleteId = doc.id },
-                            onConfirmDelete = { viewModel.deleteDocument(doc.id); confirmDeleteId = null },
-                            onCancelDelete = { confirmDeleteId = null },
-                        )
-                        HorizontalDivider()
+                else -> {
+                    val byMemberId = uiState.documents.groupBy { it.familyMemberId }
+                    val groups = buildList {
+                        byMemberId[null]?.let { add(null to it) }
+                        uiState.familyMembers.forEach { member ->
+                            byMemberId[member.id]?.let { add(member to it) }
+                        }
+                    }
+
+                    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        groups.forEach { (member, docs) ->
+                            item(key = "header-${member?.id ?: "general"}") {
+                                DocumentGroupHeader(title = member?.name ?: "Allgemein", member = member)
+                            }
+                            items(docs, key = { it.id }) { doc ->
+                                DocumentRow(
+                                    doc = doc,
+                                    familyMembers = uiState.familyMembers,
+                                    confirmingDelete = confirmDeleteId == doc.id,
+                                    onOpenPreview = { previewDoc = doc },
+                                    onReassign = { memberId -> viewModel.reassignDocument(doc.id, memberId) },
+                                    onDownload = { viewModel.downloadDocument(doc) },
+                                    onRequestDelete = { confirmDeleteId = doc.id },
+                                    onConfirmDelete = { viewModel.deleteDocument(doc.id); confirmDeleteId = null },
+                                    onCancelDelete = { confirmDeleteId = null },
+                                )
+                                HorizontalDivider()
+                            }
+                        }
                     }
                 }
             }
@@ -149,6 +195,14 @@ fun DocumentsScreen(modifier: Modifier = Modifier) {
         DocumentUploadDialog(
             pickedFileName = pickedName,
             onPickFile = { filePicker.launch("*/*") },
+            onScan = {
+                uploadError = null
+                documentScanner.getStartScanIntent(context.findActivity())
+                    .addOnSuccessListener { intentSender ->
+                        scanLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+                    }
+                    .addOnFailureListener { e -> uploadError = e.message ?: "Scanner konnte nicht gestartet werden." }
+            },
             familyMembers = uiState.familyMembers,
             apiError = uploadError,
             uploading = uploading,
@@ -157,7 +211,11 @@ fun DocumentsScreen(modifier: Modifier = Modifier) {
                 val uri = pickedUri ?: return@DocumentUploadDialog
                 scope.launch {
                     uploading = true
-                    val error = viewModel.uploadFromUri(uri, familyMemberId)
+                    val error = if (pickedIsScan) {
+                        viewModel.uploadScan(uri, familyMemberId)
+                    } else {
+                        viewModel.uploadFromUri(uri, familyMemberId)
+                    }
                     uploading = false
                     if (error == null) {
                         showUploadDialog = false
@@ -200,6 +258,22 @@ private fun EmptyDocumentsHint() {
             style = MaterialTheme.typography.bodyMedium,
             color = FamilioTheme.extendedColors.textMuted,
         )
+    }
+}
+
+@Composable
+private fun DocumentGroupHeader(title: String, member: com.kovacevic.familio.data.model.FamilyMember?) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (member != null) {
+            AvatarBadge(initials = member.initials, color = member.color, size = AvatarSize.SM)
+        }
+        Text(title, style = MaterialTheme.typography.titleSmall, color = FamilioTheme.extendedColors.textMuted)
     }
 }
 
@@ -388,4 +462,10 @@ private fun DocumentPreview(
             }
         }
     }
+}
+
+private tailrec fun Context.findActivity(): Activity = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> throw IllegalStateException("No Activity found for the given Context.")
 }

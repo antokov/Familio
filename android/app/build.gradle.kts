@@ -84,4 +84,6 @@ dependencies {
 
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+
+    implementation(libs.play.services.mlkit.document.scanner)
 }

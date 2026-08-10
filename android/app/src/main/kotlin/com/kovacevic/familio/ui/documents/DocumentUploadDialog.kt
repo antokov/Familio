@@ -2,6 +2,7 @@ package com.kovacevic.familio.ui.documents
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -21,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kovacevic.familio.data.model.FamilyMember
 
@@ -29,6 +31,7 @@ import com.kovacevic.familio.data.model.FamilyMember
 fun DocumentUploadDialog(
     pickedFileName: String?,
     onPickFile: () -> Unit,
+    onScan: () -> Unit,
     familyMembers: List<FamilyMember>,
     apiError: String?,
     uploading: Boolean,
@@ -43,8 +46,13 @@ fun DocumentUploadDialog(
         title = { Text("Dokument hochladen") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedButton(onClick = onPickFile, modifier = Modifier.fillMaxWidth()) {
-                    Text(pickedFileName ?: "Datei auswählen")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = onPickFile, modifier = Modifier.weight(1f)) {
+                        Text(pickedFileName ?: "Datei auswählen", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    OutlinedButton(onClick = onScan, modifier = Modifier.weight(1f)) {
+                        Text("Kamera")
+                    }
                 }
                 ExposedDropdownMenuBox(expanded = menuExpanded, onExpandedChange = { menuExpanded = it }) {
                     OutlinedTextField(

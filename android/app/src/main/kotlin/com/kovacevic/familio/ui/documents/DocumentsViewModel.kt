@@ -14,6 +14,9 @@ import com.kovacevic.familio.data.repository.DocumentRepository
 import com.kovacevic.familio.data.repository.FamilyMemberRepository
 import java.io.File
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -69,17 +72,31 @@ class DocumentsViewModel(
             return "Datei zu groß. Maximum: ${DocumentUpload.MAX_UPLOAD_SIZE_MB} MB"
         }
         val mimeType = appContext.contentResolver.getType(uri) ?: "application/octet-stream"
-        val tempFile = withContext(Dispatchers.IO) {
-            val file = File(appContext.cacheDir, "upload_$fileName")
-            appContext.contentResolver.openInputStream(uri)?.use { input ->
-                FileOutputStream(file).use { output -> input.copyTo(output) }
-            }
-            file
-        }
+        val tempFile = copyToCache(uri, "upload_$fileName")
         val result = documentRepository.uploadDocument(tempFile, fileName, mimeType, familyMemberId)
         tempFile.delete()
         result.onSuccess { loadDocuments() }
         return result.exceptionOrNull()?.message
+    }
+
+    /** Uploads a PDF produced by the ML Kit document scanner (see [DocumentsScreen]) — the scanner's
+     * own content URI doesn't reliably expose a queryable display name/extension, so this skips the
+     * generic [uploadFromUri] sniffing and always treats the result as a fresh PDF. */
+    suspend fun uploadScan(pdfUri: Uri, familyMemberId: String?): String? {
+        val fileName = "Scan_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.pdf"
+        val tempFile = copyToCache(pdfUri, "upload_$fileName")
+        val result = documentRepository.uploadDocument(tempFile, fileName, "application/pdf", familyMemberId)
+        tempFile.delete()
+        result.onSuccess { loadDocuments() }
+        return result.exceptionOrNull()?.message
+    }
+
+    private suspend fun copyToCache(uri: Uri, cacheFileName: String): File = withContext(Dispatchers.IO) {
+        val file = File(appContext.cacheDir, cacheFileName)
+        appContext.contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(file).use { output -> input.copyTo(output) }
+        }
+        file
     }
 
     fun reassignDocument(id: String, familyMemberId: String?) {
