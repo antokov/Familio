@@ -19,6 +19,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -42,8 +43,7 @@ import com.kovacevic.familio.ui.germanFullDate
 import com.kovacevic.familio.ui.germanGreeting
 import com.kovacevic.familio.ui.isOverdue
 import com.kovacevic.familio.ui.navigation.FamilioDestination
-import com.kovacevic.familio.ui.navigation.LocalFamilioNavController
-import com.kovacevic.familio.ui.navigation.navigateToTab
+import com.kovacevic.familio.ui.navigation.LocalTabNavigator
 import com.kovacevic.familio.ui.theme.FamilioTheme
 
 @Composable
@@ -61,7 +61,12 @@ fun DashboardScreen(modifier: Modifier = Modifier) {
         },
     )
     val uiState by viewModel.uiState.collectAsState()
-    val navController = LocalFamilioNavController.current
+    val tabNavigator = LocalTabNavigator.current
+
+    // The pager (see MainScreen) disposes tabs that scroll off-screen, so re-entering
+    // composition here doubles as "this tab became visible again" — re-fetch to pick up
+    // changes made while the user was on another tab.
+    LaunchedEffect(Unit) { viewModel.refresh() }
 
     Column(
         modifier = modifier
@@ -85,7 +90,7 @@ fun DashboardScreen(modifier: Modifier = Modifier) {
         DashboardWidgetCard(
             icon = Icons.Filled.CalendarMonth,
             title = "Kalender",
-            onViewAll = { navController.navigateToTab(FamilioDestination.Calendar.route) },
+            onViewAll = { tabNavigator(FamilioDestination.Calendar.route) },
         ) {
             when {
                 uiState.eventsLoading -> WidgetStateText("Lädt…")
@@ -100,7 +105,7 @@ fun DashboardScreen(modifier: Modifier = Modifier) {
         DashboardWidgetCard(
             icon = Icons.Filled.Checklist,
             title = "Aufgaben",
-            onViewAll = { navController.navigateToTab(FamilioDestination.Tasks.route) },
+            onViewAll = { tabNavigator(FamilioDestination.Tasks.route) },
         ) {
             when {
                 uiState.tasksLoading -> WidgetStateText("Lädt…")
@@ -115,7 +120,7 @@ fun DashboardScreen(modifier: Modifier = Modifier) {
         DashboardWidgetCard(
             icon = Icons.Filled.ShoppingCart,
             title = "Wocheneinkauf",
-            onViewAll = { navController.navigateToTab(FamilioDestination.Shopping.route) },
+            onViewAll = { tabNavigator(FamilioDestination.Shopping.route) },
         ) {
             val items = uiState.shoppingItems
             when {

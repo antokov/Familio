@@ -1,17 +1,11 @@
 package com.kovacevic.familio.ui.navigation
 
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.NavHostController
 
-val LocalFamilioNavController = staticCompositionLocalOf<NavHostController> {
-    error("No NavHostController provided")
-}
-
-fun NavHostController.navigateToTab(route: String) {
-    navigate(route) {
-        popUpTo(graph.findStartDestination().id) { saveState = true }
-        launchSingleTop = true
-        restoreState = true
-    }
+/**
+ * Lets any screen jump to a bottom-nav tab (by [FamilioDestination.route]) without knowing that
+ * tabs are implemented as pages of a HorizontalPager — provided by [com.kovacevic.familio.ui.MainScreen].
+ */
+val LocalTabNavigator = staticCompositionLocalOf<(String) -> Unit> {
+    error("No tab navigator provided")
 }
