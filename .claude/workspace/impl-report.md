@@ -1,36 +1,34 @@
-# Dev Implementation Report — Termin löschen
+# Dev Implementation Report — Dokumente nach zugewiesener Person gruppieren
 
 ## Approach
 
-Frontend-only, additive change built exactly per `arch-decision.md` and `design-decision.md`. No backend code touched — `DELETE /api/events/{event_id}` already existed and was already tested.
+Frontend-only, exactly per `arch-decision.md`/`design-decision.md`, porting the already-shipped Android grouping semantics (order, "Allgemein" label, empty-group omission) 1:1 to the webapp.
 
-- `useEvents.ts` gained a `deleteEvent(id)` following the existing `createEvent`/`updateEvent` shape in the same file (`Promise<boolean>`, filters local `events` state on success). A `404` response is treated as success (event already gone).
-- `EventFormModal.tsx` gained an optional `onDelete` prop, rendered as a delete icon-button (`Trash2`) only when `isEdit && onDelete`. Clicking it swaps in a 2-step inline confirm row ("Termin löschen?" / "Ja, löschen" / "Abbrechen") — no `window.confirm()`, no nested modal, matching the existing `TaskItem` convention as instructed.
-- The `.actions` footer was restructured: the delete control (or its confirm row) sits on the far left; the existing Abbrechen/Speichern pair was wrapped in a new `.primaryActions` div with `margin-left: auto` so it always stays right-aligned whether or not the delete control is present (avoids the `justify-content: space-between` single-child collapse bug that would otherwise left-align the primary buttons in create mode).
-- Delete errors reuse the existing `.saveError` visual treatment via a new `deleteError` boolean state and message, rendered in the same slot as the existing save-error message.
-- `CalendarPage.tsx` wires `deleteEvent` from the hook into a `handleDelete` that mirrors `handleSave`'s refetch-after-mutation pattern (`loadForCurrentView()` on success), passed as `onDelete={editingEvent ? handleDelete : undefined}`.
+- `groupDocuments(documents, familyMembers)` — new exported pure function in `DocumentsPage.tsx`: buckets documents by `familyMemberId`, then assembles the ordered result as `[Allgemein-if-non-empty, ...familyMembers order, each if non-empty]`. Recomputed directly in the render body (no memoization) so reassignment/deletion just fall out of the existing reactive `documents`/`familyMembers` state.
+- `DocumentGroupHeader` — new component: `AvatarBadge size="sm"` + `<h3>` name for a member group, or just an `<h3>Allgemein</h3>` (no avatar) for the unassigned group.
+- `DocumentsPage.tsx` render: replaced the single flat `<ul>` with one `.group` wrapper (header + `<ul>`) per `groupDocuments()` entry.
 
 ## Files Changed
 
-- `webapp/src/hooks/useEvents.ts` — added `deleteEvent`.
-- `webapp/src/components/EventFormModal/EventFormModal.tsx` — added `onDelete` prop, delete confirm flow, footer restructure.
-- `webapp/src/components/EventFormModal/EventFormModal.module.css` — `.primaryActions`, `.deleteTriggerBtn`, `.deleteConfirmRow`, `.deleteConfirmText`, `.deleteConfirmBtn`, `.deleteConfirmCancelBtn`; `.actions` no longer sets `justify-content`.
-- `webapp/src/pages/CalendarPage.tsx` — `handleDelete`, wired to `EventFormModal`'s new prop.
-- `webapp/src/components/EventFormModal/EventFormModal.test.tsx` — extended `renderModal()` helper with an optional `onDelete` param (backward compatible, existing calls unaffected); new "Termin löschen" describe block (7 tests: hidden in create mode, hidden without `onDelete`, visible in edit mode with `onDelete`, confirm-before-delete, cancel-does-not-delete, success calls `onDelete` + closes, failure shows error + does not close).
-- `webapp/src/hooks/useEvents.test.ts` — **new file.** 4 tests scoped to `deleteEvent` only (204 success, 404-as-success, 500 failure, network-error failure) — deliberately not a full retrofit of the hook (that's the larger, separately-tracked FS-17).
+- `webapp/src/pages/DocumentsPage.tsx` — `groupDocuments()` + `DocumentGroup` type (exported), grouped render.
+- `webapp/src/pages/DocumentsPage.module.css` — `.groups` (space-6 gap between sections), `.group` wrapper.
+- `webapp/src/components/DocumentGroupHeader/DocumentGroupHeader.tsx` — **new**.
+- `webapp/src/components/DocumentGroupHeader/DocumentGroupHeader.module.css` — **new**.
+- `webapp/src/components/DocumentGroupHeader/DocumentGroupHeader.test.tsx` — **new**, 2 tests.
+- `webapp/src/pages/DocumentsPage.test.tsx` — **new file** (none existed before, per arch-decision scope note referencing TD-13's coverage gap). 11 tests: 6 on `groupDocuments` directly (order, empty-group omission in both directions, empty input, orphaned-`familyMemberId` fallback, within-group order preservation) + 3 render-level tests mocking `useDocuments`/`useFamilyMembers`/`useEvents` via `vi.hoisted`.
 
 ## Assumptions Made
 
-- The inline confirm-cancel button needed a distinct accessible name from the modal's main "Abbrechen" button (both are visually labeled "Abbrechen"); added `aria-label="Löschen abbrechen"` to the inline one so screen readers and tests can disambiguate them without changing the visible copy design specified.
-- `onDelete` is optional on `EventFormModal` (not required) so existing tests/usages that don't care about delete (all the pre-existing edit/all-day/multi-day tests) don't need to pass it — the delete UI simply doesn't render without it, which is also the correct behavior for create mode.
+- None beyond what arch-decision.md/design-decision.md already specified.
 
 ## Deviations from arch-decision.md / design-decision.md
 
-None. The `aria-label` addition above is an implementation detail filling a gap neither doc specified, not a deviation from what they did specify.
+- **One implementation-detail addition not specified by either doc:** `DocumentGroupHeader`'s label renders as an `<h3>` rather than a bare `<span>`. Reason: `DocumentItem`'s own reassignment `<select>` lists every family member's name as an `<option>` on *every* document row, so a plain-text header ("Anton") is not reliably distinguishable from an option with the same text once multiple documents are on screen — a real test-writing exercise surfaced this ambiguity immediately. Giving the header proper heading semantics (`role` implicit via `<h3>`) makes it unambiguously queryable (`getByRole('heading', ...)`) and is a genuine accessibility improvement (screen-reader users get real landmarks for "whose documents are these"), not just a testing workaround. Visual styling is unchanged (`margin: 0` added to counteract the browser's default `<h3>` margin, font-size/weight/color exactly as designed).
+- **Bug caught and fixed during test-writing, not spec'd defensively in arch-decision.md:** a document whose `familyMemberId` doesn't match any currently-known family member (a state the real app shouldn't produce, since `Document.family_member_id`'s `ON DELETE SET NULL` FK guarantees it becomes `NULL` on member deletion — but not a state the grouping function itself was protected against) was silently dropped from every group instead of falling back to "Allgemein". Fixed by checking `doc.familyMemberId` against a `Set` of known member ids before using it as a group key. This is a robustness improvement consistent with BA edge case 3's intent ("those documents simply reappear under Allgemein"), not a scope change.
 
 ## Technical Debt / Follow-up
 
-- None introduced. `useEvents.test.ts` intentionally covers only the new function; full hook coverage remains tracked as **FS-17** (already in backlog, unchanged).
+None introduced.
 
 ## Open Items
 

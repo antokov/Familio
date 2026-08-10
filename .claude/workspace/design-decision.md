@@ -1,45 +1,45 @@
-# Design Decision — Termin löschen
+# Design Decision — Dokumente nach zugewiesener Person gruppieren
 
 ## Scope
-`EventFormModal.tsx` / `EventFormModal.module.css` only, edit mode (`isEdit === true`). No other component is visually touched.
+`DocumentsPage.tsx` / `DocumentsPage.module.css` (render structure: one header + one `<ul>` per group instead of one flat `<ul>`) and a new `DocumentGroupHeader` component. `DocumentItem` itself is visually untouched.
 
 ## Layout
 
-The action row at the bottom of the modal (`.actions`, currently `Abbrechen` | `Speichern`/`Erstellen`) becomes a `justify-content: space-between` row instead of `flex-end`: the delete action sits at the far left, isolated from the primary Abbrechen/Speichern pair on the right, so it reads as a destructive, separate action rather than a third option in the same button group (standard pattern: destructive actions get spatial distance from the primary flow, not just color).
+Each group becomes a `<section>`-like block: a header row, then that group's `<ul>` of `DocumentItem`s (same `.list` styling as today, just repeated per group instead of once globally):
 
 ```
-[ Löschen ]                    [ Abbrechen ] [ Speichern ]
+( M ) Mira
+  [ DocumentItem ]
+  [ DocumentItem ]
+
+( A ) Anton
+  [ DocumentItem ]
+
+Allgemein
+  [ DocumentItem ]
 ```
 
-When the delete icon-button is clicked, it swaps in place for an inline confirm row (does not shift the Abbrechen/Speichern buttons, does not open a second modal):
-
-```
-[ Termin löschen? ] [ Ja, löschen ] [ Abbrechen ]      [ Abbrechen ] [ Speichern ]
-```
+Groups stack with `var(--space-6)` between them (one step up from the existing `.list` internal gap of `var(--space-2)`) — enough separation to read as distinct sections without needing a divider line or background-color block, consistent with how this app generally separates content via whitespace + typography rather than boxes/borders (compare `SettingsPage`'s section spacing).
 
 ## Token Usage
 
-- **Delete trigger button:** icon-only (`Trash2` from `lucide-react`, 16px, consistent with existing icon sizing in this codebase e.g. `X size={18}` in the header), `width/height: 36px`, `border-radius: var(--radius-md)`, `color: var(--color-text-muted)` at rest.
-- **Delete trigger hover:** `background-color: rgba(212, 98, 58, 0.12)` + `color: var(--color-accent)` — this exact rgba/token pairing already exists as `.deleteBtn:hover` in `TaskItem.module.css`; reuse the same values (not the same class, per Architect's constraint) so destructive-hover feedback looks identical across the app.
-- **Confirm text** ("Termin löschen?"): `font-size: var(--font-size-sm)`, `font-weight: 700`, `color: var(--color-accent)` — slightly more weight than `TaskItem`'s `.confirmText` (`font-size-xs`) because this sits in a spacious modal footer, not a dense list row; `--font-size-sm` matches the modal's own `.label`/body type scale.
-- **Confirm button ("Ja, löschen"):** solid, `background-color: var(--color-accent)`, `color: #fff`, `padding: var(--space-3) var(--space-5)`, `border-radius: var(--radius-md)` — sized like the modal's own `.cancelBtn`/`.saveBtn` (not the smaller pill-shaped `--radius-full` buttons from `TaskItem`), so it feels native to this modal's button scale rather than borrowed from the list-row context.
-- **Confirm-cancel button ("Abbrechen", the inline one):** same visual treatment as the modal's existing `.cancelBtn` (`background-color: var(--color-surface-alt)`, `color: var(--color-text-muted)`) — reuse the *values*, new class name `deleteConfirmCancelBtn` per Architect's no-collision constraint.
-- **Delete error message** (`deleteError`): identical treatment to the existing `.saveError` (`font-size: var(--font-size-sm)`, `color: var(--color-accent)`), rendered in the same position (just above `.actions`) so save-errors and delete-errors are visually interchangeable — one error slot, one convention.
+- **`DocumentGroupHeader` row:** `display: flex`, `align-items: center`, `gap: var(--space-2)`, `margin-bottom: var(--space-2)` (tight — the header should read as a label for the list immediately below it, not a separate block).
+- **Header label text:** `font-size: var(--font-size-sm)`, `font-weight: 700`, `color: var(--color-text-muted)` — same weight/color as this app's other muted section labels (e.g. `EventFormModal`'s `.label`), signaling "metadata about the group," not a page heading. Deliberately *not* `--font-size-lg`/`--color-text` (that scale is reserved for the page's own `<h2>` "Dokumente" heading) — the group headers must stay visually subordinate to the page title.
+- **Avatar in header:** `AvatarBadge` `size="sm"` (matches Android's `AvatarSize.SM` for this exact spot) — small enough to read as a label decoration, not a content item competing with the `DocumentItem` rows below it.
+- **Group-to-group spacing:** `var(--space-6)` on the wrapping `.group` div (`margin-bottom`, or `gap` on a parent flex column of groups) — one step above the page's existing section-level rhythm (`.page` already uses `gap: var(--space-5)` between its top-level blocks; groups-of-documents nested one level deeper get a slightly larger `--space-6` so they don't visually merge with that outer rhythm).
+- **"Allgemein" header:** identical text styling to a member header, just no `AvatarBadge` — do not substitute a placeholder/generic icon in its place (Android doesn't either); the absence of an avatar *is* the signal that this group is the unassigned one.
 
 ## Interactions
 
-- Delete icon-button: `transition: background-color 0.15s ease, color 0.15s ease` (matches `.closeBtn`/`.deleteBtn` transitions already used elsewhere in this file/TaskItem) on hover only — no focus-ring redesign needed, inherits default.
-- Swap from icon-button to confirm row: no animation (instant swap) — consistent with `TaskItem`, which also swaps instantly rather than animating; do not introduce a new transition pattern for a single low-frequency action.
-- "Ja, löschen" while `deleting === true`: same disabled treatment as `.saveBtn:disabled` (`opacity: 0.4`, `cursor: not-allowed`), label stays "Ja, löschen" (no need for a "Löscht…" loading label given the action is a single row-swap already signaling in-progress state — keep it simple, this is a small aside for a two-button micro-flow, not the main save action).
-- Clicking "Abbrechen" (the inline confirm-cancel) reverts to the plain delete icon-button, no other state changes.
+- No new interactive elements — headers are static labels, not buttons (no collapse/expand per story.md Out of Scope).
+- Existing `DocumentItem` interactions (reassign dropdown, preview, download, delete, extract) are completely unchanged; reassigning a document simply causes it to re-render under a different header on the next render pass (no transition/animation needed — instant re-grouping is fine and matches how every other list-mutation in this app already behaves, e.g. deleting a task).
 
 ## Signature Element
 
-The **spatial separation** of the delete action to the opposite side of the footer (left vs. right) is the one deliberate, memorable choice here — it's what makes an accidental click on "Löschen" while reaching for "Speichern" structurally unlikely, without relying on color alone for that safety margin.
+The **small avatar inline with the group label** is the one deliberate visual touch — it lets you recognize "whose documents these are" at a glance from the avatar's color alone, before even reading the name, extending the same avatar-as-identity language already used throughout the app (Sidebar, EventFormModal attendees, TaskItem assignee) into a new context: a section label rather than an item decoration.
 
 ## Avoid
-
-- No native `window.confirm()`.
-- No red/destructive-colored *button* for the primary trigger (only the icon-button hover state hints destructiveness) — matches how `TaskItem`'s resting delete icon is also neutral (`--color-text-muted`) until hovered, avoiding a permanently alarming footer.
-- No second modal/dialog layer for confirmation.
-- Do not center or right-align the delete trigger next to Abbrechen/Speichern — that removes the spatial-separation safety margin that is the whole point of this layout choice.
+- Do not give group headers a background/box/border — this app uses whitespace and type-weight for hierarchy, not container chrome, for this kind of grouping (contrast with `DocumentItem`'s own card treatment, which stays as-is).
+- Do not use `AvatarBadge size="md"` or `"lg"` in the header — reserve those sizes for contexts where the avatar is the primary content (attendee pickers), not a label decoration.
+- Do not add a document count badge/number next to each group header — not requested, adds visual noise for a feature about *finding* documents by person, not counting them.
+- Do not reorder or restyle `DocumentItem` itself.

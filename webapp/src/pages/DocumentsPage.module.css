@@ -57,6 +57,17 @@
   color: var(--color-text-muted);
 }
 
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
 .list {
   display: flex;
   flex-direction: column;

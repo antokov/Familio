@@ -1,34 +1,28 @@
-# BA Analysis — Termin löschen
+# BA Analysis — Dokumente nach zugewiesener Person gruppieren
 
 ## 1. Business Rules
 
-1. A delete action is only available for an **existing** event (edit mode) — a new/unsaved event has nothing to delete.
-2. Deleting requires an explicit confirmation step before any DELETE request is sent (AC2/AC4).
-3. On successful deletion, the event is removed from the in-memory event list immediately (no refetch required) so Month/Week views update instantly, and the edit dialog closes.
-4. On a failed deletion (non-2xx, network error), the event stays in the list, the modal stays open, and the user sees an error message (AC5) — mirrors the existing `saveError` pattern already used for create/update in `EventFormModal`.
-5. Deletion is permanent — no soft-delete/undo, consistent with how `DELETE` already behaves for tasks, shopping items, documents, and family members.
-6. No authorization check — the app has no auth/user roles (per CLAUDE.md), so any family member can delete any event, same as every other mutation in the app today.
-7. All-day and multi-day events are deleted the same way as timed events — deletion is purely by `id`, `all_day`/date range is irrelevant.
+1. Documents are partitioned into groups by `familyMemberId`: one group per family member that owns at least one document, plus one "Allgemein" group for documents with `familyMemberId === null`.
+2. **Group order** (resolved by existing Android precedent — see commit "Group Android documents by family member and add camera-scan upload" — adopted as-is for webapp/Android consistency, no new decision needed): "Allgemein" first, then one section per family member in the order `familyMembers` is already returned by the API/hook (creation order) — *not* alphabetical, *not* re-sorted.
+3. **Empty groups are omitted entirely** — a family member with zero documents gets no section header at all; "Allgemein" is likewise omitted if there are zero unassigned documents (AC3). This falls out naturally from grouping by existing documents rather than iterating all family members unconditionally.
+4. Documents *within* a group keep whatever order the API already returns them in (currently newest-first via `ORDER BY uploaded_at DESC` in `GET /api/documents`) — grouping is a client-side partition, not a re-sort.
+5. Reassigning a document (via the existing per-item `<select>`) moves it between groups live, with no page reload — this already falls out of the existing reactive `documents` state (`useDocuments`) once rendering is grouped by `familyMemberId`, as long as the grouping is recomputed on every render rather than cached/memoized against a stale snapshot.
+6. Zero documents overall → existing "Keine Dokumente" empty state renders unchanged, no group headers of any kind (AC5) — this is a pre-existing early-return in `DocumentsPage.tsx` that must remain first in the render order.
 
 ## 2. Edge Cases
 
-1. **Double-submit:** user double-clicks the confirm button while a delete request is in flight → must not fire two `DELETE` requests. Mitigate by disabling the confirm control while a `deleting` state is true (same shape as the existing `saving` state used for create/update).
-2. **Already deleted (404):** two family members could have the event open at once; if a second delete/edit hits a `404` (event already gone — this path is already covered by `test_delete_nonexistent_returns_404` on the backend), treat it as an effectively successful outcome from the user's point of view — remove it locally and close the modal rather than showing a scary error, since the end state the user wants (event gone) is already true.
-3. **Cancel confirmation:** clicking "Nein"/cancel on the delete confirmation must not delete anything and must leave the edit modal open and untouched. Dismissing the whole modal (backdrop click / X / "Abbrechen") while the delete-confirm is showing should behave like closing the modal normally (no deletion).
-4. **All-day / multi-day events:** no special-casing needed — single `id`-based DELETE regardless of `allDay`/date span.
-5. **Empty calendar after delete:** deleting the last event in view should leave Month/Week view in the same empty state they already render for a day/period with 0 events (no new empty-state work needed, existing rendering already handles 0 events per day).
+1. **All documents assigned, none unassigned:** "Allgemein" section must not render (empty string/zero-length group is skipped) — covered by rule 3.
+2. **All documents unassigned, none assigned:** every family member section is skipped; only "Allgemein" renders. Symmetric case of #1, same mechanism.
+3. **A family member with documents gets deleted:** `Document.family_member_id` already becomes `NULL` via the existing `ON DELETE SET NULL` FK (same mechanism already relied on in the "Zugewiesene Person"-Extraktion story) — those documents simply reappear under "Allgemein" on the next render, no special-casing needed.
+4. **Reassigning the last document out of a family member's group:** that member's section must disappear immediately (not linger empty) — same "recompute from current `documents` array on every render" mechanism as rule 5, no stale/cached grouping.
+5. **New family member with no documents yet:** must not get an empty section — consistent with rule 3 (groups are derived from documents that exist, not from the family-member list independently).
 
 ## 3. Data Model Implications
 
-**None.** No new DB fields, no new backend endpoint. `DELETE /api/events/{event_id}` already exists in `backend/app/routers/events.py`, is already tested (`backend/tests/test_events.py::TestDeleteEvent`), and needs no changes.
-
-Frontend-only additions:
-- New `deleteEvent(id: string): Promise<boolean>` in `webapp/src/hooks/useEvents.ts` (same shape/pattern as `deleteTask`/`deleteDocument`/`deleteFamilyMember` in sibling hooks — fetch DELETE, on success filter local state, on failure set an error and return `false`).
-- New `onDelete` wiring: `EventFormModal` gets an `onDelete` prop (only relevant/rendered in edit mode) that `CalendarPage` implements by calling `deleteEvent(editingEvent.id)`.
+**None.** Purely a client-side rendering/grouping change in `DocumentsPage.tsx`. No backend changes: `GET /api/documents` and `GET /api/family-members` already return everything needed (`Document.familyMemberId`, `FamilyMember.id`/`.name`/`.initials`/`.color`), both already fetched on this page today via `useDocuments()`/`useFamilyMembers()`.
 
 ## 4. Open Questions
 
-- **OQ-NB-1 (NON-BLOCKING):** Confirmation UI style — 2-step inline swap (matches `TaskItem`'s existing "Löschen?" / "Ja" / "Nein" pattern) vs. a dedicated warning banner inside the modal. No native `window.confirm()` is used anywhere else in the app, so it should not be introduced here either. → Architect/Design to decide, but must reuse the established inline 2-step convention rather than inventing a new modal-in-modal.
-- **OQ-NB-2 (NON-BLOCKING):** Whether the delete button lives in the modal footer (next to Abbrechen/Speichern) or near the header (next to the close X). → Design decision, no business impact.
+None — the exact grouping semantics (order, empty-group omission, "Allgemein" label and its position) are already fully specified by the existing, already-shipped Android implementation, which this story explicitly brings the webapp to parity with. No new product decision is required.
 
 No BLOCKING questions. Proceeding to Architect phase.

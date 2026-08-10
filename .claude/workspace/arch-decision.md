@@ -1,48 +1,47 @@
-# Architect Decision — Termin löschen (Mode A: Pre-Dev Scoping)
+# Architect Decision — Dokumente nach zugewiesener Person gruppieren (Mode A: Pre-Dev Scoping)
 
 ## Summary
 
-Purely additive, frontend-only feature. The backend endpoint (`DELETE /api/events/{event_id}`) already exists and is already tested — do not touch the backend. This closes backlog item **FS-13**.
+Pure frontend, webapp-only change. No backend touch — `GET /api/documents` and `GET /api/family-members` already return everything needed, both already fetched on this page. This brings the webapp to parity with the already-shipped Android grouping (see backlog Architecture Log entry "Group Android documents by family member"), and should copy that implementation's exact semantics (group order, empty-group omission, "Allgemein" label) rather than re-deriving them.
 
 ## Files Dev Must Touch
 
-1. `webapp/src/hooks/useEvents.ts` — add `deleteEvent(id: string): Promise<boolean>`.
-2. `webapp/src/components/EventFormModal/EventFormModal.tsx` — add an `onDelete` prop (edit-mode only) + inline 2-step delete confirmation.
-3. `webapp/src/components/EventFormModal/EventFormModal.module.css` — styles for the new delete button and its inline confirm row.
-4. `webapp/src/pages/CalendarPage.tsx` — wire `deleteEvent` from the hook into `EventFormModal`'s new `onDelete` prop.
-5. `webapp/src/components/EventFormModal/EventFormModal.test.tsx` — extend with delete-flow tests.
-6. `webapp/src/hooks/useEvents.test.ts` — **new file.** No hook tests exist for `useEvents` today (backlog FS-17 tracks full coverage as a separate, larger follow-up). Scope here is narrow: cover only the new `deleteEvent` function (success, 404-as-success, hard failure), not a full retrofit of `createEvent`/`updateEvent`/`fetchEvents`. Leave FS-17 in the backlog for the rest.
+1. `webapp/src/pages/DocumentsPage.tsx` — add an exported pure function `groupDocuments(documents: Document[], familyMembers: FamilyMember[]): DocumentGroup[]` and use it to render one `<DocumentGroupHeader>` + `<ul>` per group instead of today's single flat `<ul>`.
+2. `webapp/src/components/DocumentGroupHeader/DocumentGroupHeader.tsx` — **new** small presentational component: renders an `AvatarBadge` (size `sm`) + name for a family-member group, or just the "Allgemein" text (no avatar) for the unassigned group. Mirrors Android's `DocumentGroupHeader` composable 1:1.
+3. `webapp/src/components/DocumentGroupHeader/DocumentGroupHeader.module.css` — **new**, minimal (row layout + muted label text, matching Android's `textMuted` + small title style).
+4. `webapp/src/pages/DocumentsPage.module.css` — small addition for group spacing (e.g. a `.group` wrapper margin) if the existing `.list` gap isn't sufficient once split into multiple `<ul>`s.
+5. `webapp/src/pages/DocumentsPage.test.tsx` — **new file.** No test file exists for this page today (tracked as part of existing backlog TD-13, scope explicitly already includes "Extraktions-Verdrahtung"; this story adds the grouping logic itself under the same umbrella). Cover `groupDocuments` directly (pure function, easy to unit test) plus a handful of render-level assertions (headers present/absent, "Allgemein" omitted when nothing unassigned, empty state still wins over any group at zero documents).
+6. `webapp/src/components/DocumentGroupHeader/DocumentGroupHeader.test.tsx` — **new**, small (2-3 tests: renders avatar+name for a member, renders "Allgemein" without avatar).
 
-Do not touch any other file. In particular: no backend changes, no `MonthView`/`WeekView` changes (delete is edit-modal-only per story scope), no new route/page.
+Do not touch `DocumentItem.tsx`, `useDocuments.ts`, `useFamilyMembers.ts`, or any backend file — none of them need to change for this story.
 
 ## Patterns to Follow
 
-- **`deleteEvent` shape:** mirror `createEvent`/`updateEvent` in the *same* hook — return `Promise<boolean>`, and update the hook's local `events` array on success (`setEvents(prev => prev.filter(e => e.id !== id))`), not `Promise<void>` like `deleteTask`/`deleteDocument` in other hooks. Stay consistent with the two sibling functions already in this file, not with hooks in other files.
-- **404 = success:** if the DELETE response is `404`, treat it as success (event already gone — filter it locally and return `true`) rather than surfacing an error. Only a genuine failure (network error, 5xx) should return `false`. This follows BA analysis edge case 2.
-- **Confirmation UI:** reuse the app's existing 2-step inline-confirm convention from `TaskItem.tsx`/`TaskItem.module.css` (`confirmRow` / "Löschen?" text / "Ja" / "Nein" buttons) — do **not** introduce `window.confirm()` or a nested modal-in-modal. Re-implement the same interaction shape locally in `EventFormModal` (a local `confirmDelete` boolean state), since `EventFormModal.module.css` already defines its own `.cancelBtn`/`.saveBtn` for the main form actions — new class names must not collide with those (see Constraints).
-- **Error surfacing:** reuse the existing `saveError`-style local state/message pattern already in `EventFormModal` (rendered above `.actions`) for a delete failure, rather than relying on the page-level `error` banner from `useEvents` (that banner is driven by `fetchEvents` and says "Kalender konnte nicht geladen werden", which would be a misleading message for a failed delete). Add a sibling local state, e.g. `deleteError`, with its own short message (e.g. "Löschen fehlgeschlagen. Bitte erneut versuchen.").
-- **CalendarPage wiring:** mirror `handleSave` — on successful delete, call `loadForCurrentView()` (existing refetch-after-mutation pattern already used for create/update) and then `closeModal()`. `EventFormModal`'s `onDelete` prop should be `(id: string) => Promise<boolean>` so the modal can decide whether to close itself or show `deleteError`, matching how `onSave`'s return value already drives `setSaveError` today.
-- **Visibility rule:** the delete action/button renders only when `isEdit` is true (existing `isEdit = !!editEvent` constant already in the component) — never in create mode.
-- **Button disabling while in-flight:** reuse the existing `saving` boolean's spirit — introduce a `deleting` boolean local to `EventFormModal` that disables the confirm ("Ja") button and the rest of the form's primary actions while a delete request is in flight, preventing double-submit (BA edge case 1). It does not need to disable the whole form the way `saving` does for save, only needs to prevent a second delete from firing — keep this minimal.
+- **Copy Android's exact grouping algorithm**, translated to TS: group `documents` by `familyMemberId` (`null` key = unassigned); assemble the final ordered list as `[unassigned group (if non-empty), ...familyMembers.map(member => member's group if non-empty)]`. This is a direct port of `DocumentsScreen.kt`'s `byMemberId`/`groups` logic — do not invent a different ordering (e.g. do not alphabetize, do not put "Allgemein" last).
+- **Pure, colocated, exported helper function** — follow this codebase's established convention (`computeEventLayout` in `WeekView.tsx`, `getNextDueDate` in `useTasks.ts`, `extractDate`/`extractTime` in `EventFormModal.tsx`) of exporting a pure grouping/computation function directly from the component file that uses it, rather than introducing a new `utils/` directory (none exists in this codebase today — do not create one for a single function).
+- **Recompute on every render, no memoization/caching** — `groupDocuments(documents, familyMembers)` is called directly in the render body from the already-reactive `documents`/`familyMembers` state; this is what makes reassignment (AC4) and member-deletion (edge case 3) "just work" with zero extra wiring. Do not wrap it in `useMemo` unless a real performance problem is demonstrated — premature optimization isn't warranted for a family-sized document list.
+- **New component, not inline JSX** — `DocumentGroupHeader` becomes its own component (mirroring Android's own `DocumentGroupHeader` composable) so it's independently testable and consistent with this codebase's convention of one component per meaningful, reusable UI unit (e.g. `AvatarBadge`, `DocumentItem`).
+- **Reuse `AvatarBadge`** exactly as `DocumentItem`/`EventFormModal`/`ExtractEventsModal` already do — `size="sm"` (matching Android's `AvatarSize.SM` choice for this exact header context).
+- **Empty-group omission via the groupBy itself** — do not iterate `familyMembers` unconditionally and then filter; build groups only from members that actually appear as keys in the `documents`-derived grouping (same as Android's `byMemberId[member.id]?.let { ... }`), so a member with zero documents produces no entry at all, not an entry that gets filtered out later.
 
 ## Explicit Constraints (What NOT to Do)
 
-- Do NOT modify `backend/app/routers/events.py`, `backend/app/schemas/event.py`, or `backend/tests/test_events.py` — the DELETE endpoint and its tests are already complete and correct for this story.
-- Do NOT add delete affordances to `MonthView`/`WeekView` event pills directly — deletion is edit-modal-only in this story (see story.md "Out of Scope").
-- Do NOT introduce `window.confirm()`/`window.alert()` anywhere.
-- Do NOT reuse `TaskItem.module.css` classes directly across component boundaries (CSS Modules are scoped per-component in this codebase — every existing component defines its own copies of shared visual patterns, e.g. `.cancelBtn` exists separately in both `TaskItem.module.css` and `EventFormModal.module.css`). Add new, distinctly-named classes inside `EventFormModal.module.css` (e.g. `deleteConfirmRow`, `deleteConfirmBtn`, `deleteConfirmCancelBtn`, `deleteBtn`) — do not rename or repurpose the modal's existing `.cancelBtn`/`.saveBtn`, which remain the "Abbrechen"/"Speichern" buttons.
-- Do NOT add recurrence-aware deletion logic — `calendar_events` has no recurrence concept (unlike `tasks`).
-- Do NOT expand scope to a full `useEvents` test retrofit (FS-17) — only test the new `deleteEvent` function.
+- Do NOT touch the backend — no new endpoint, no new query param, no sorting change on `GET /api/documents`.
+- Do NOT change `DocumentItem.tsx`'s own rendering, props, or the per-item assignment `<select>`'s wording — this story only adds a grouping/header layer around the existing list rendering (see story.md "Out of Scope").
+- Do NOT re-sort documents within a group — keep whatever order the API returns (`ORDER BY uploaded_at DESC`, unchanged).
+- Do NOT create a new `webapp/src/utils/` directory for `groupDocuments` — export it from `DocumentsPage.tsx` per the established colocation convention.
+- Do NOT let the "Keine Dokumente" empty state and the grouped rendering coexist — the empty-state early return must remain first, exactly as today, so zero documents never renders zero empty group headers either.
+- Do NOT introduce collapsible/expandable sections — out of scope per story.md.
 
 ## Files Dev Needs in Context (max 8)
 
-1. `webapp/src/hooks/useEvents.ts`
-2. `webapp/src/components/EventFormModal/EventFormModal.tsx`
-3. `webapp/src/components/EventFormModal/EventFormModal.module.css`
-4. `webapp/src/pages/CalendarPage.tsx`
-5. `webapp/src/components/TaskItem/TaskItem.tsx` (reference only — confirm-flow pattern to mirror)
-6. `webapp/src/components/TaskItem/TaskItem.module.css` (reference only — class shapes to mirror, not import)
-7. `webapp/src/components/EventFormModal/EventFormModal.test.tsx`
-8. `webapp/src/types/event.ts`
+1. `webapp/src/pages/DocumentsPage.tsx`
+2. `webapp/src/pages/DocumentsPage.module.css`
+3. `webapp/src/components/DocumentItem/DocumentItem.tsx` (reference — do not modify)
+4. `webapp/src/components/AvatarBadge/AvatarBadge.tsx` (reference — component to reuse)
+5. `webapp/src/types/document.ts`
+6. `webapp/src/types/family.ts`
+7. `webapp/src/hooks/useDocuments.ts` (reference — confirms `documents` shape/order, do not modify)
+8. `webapp/src/hooks/useFamilyMembers.ts` (reference — confirms `familyMembers` shape/order, do not modify)
 
-No blockers — this is a small, additive, well-precedented change. Proceeding to Design phase (Phase 3b applies — `webapp/src/` files are in scope).
+No blockers — small, additive, fully precedented by the already-shipped Android implementation (same grouping semantics, same "Allgemein" label, same empty-group-omission rule). Proceeding to Design phase (`webapp/src/` files are in scope).

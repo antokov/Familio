@@ -4,16 +4,49 @@ import { useDocuments } from '../hooks/useDocuments'
 import { useFamilyMembers } from '../hooks/useFamilyMembers'
 import { useEvents } from '../hooks/useEvents'
 import { DocumentItem } from '../components/DocumentItem/DocumentItem'
+import { DocumentGroupHeader } from '../components/DocumentGroupHeader/DocumentGroupHeader'
 import { DocumentUploadModal } from '../components/DocumentUploadModal/DocumentUploadModal'
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal/DocumentPreviewModal'
 import { ExtractEventsModal } from '../components/ExtractEventsModal/ExtractEventsModal'
 import type { Document, ExtractedEventCandidate } from '../types/document'
+import type { FamilyMember } from '../types/family'
 import styles from './DocumentsPage.module.css'
 
 interface ExtractionState {
   docId: string
   filename: string
   candidates: ExtractedEventCandidate[]
+}
+
+export interface DocumentGroup {
+  member: FamilyMember | null
+  docs: Document[]
+}
+
+export function groupDocuments(documents: Document[], familyMembers: FamilyMember[]): DocumentGroup[] {
+  const knownMemberIds = new Set(familyMembers.map(m => m.id))
+
+  const byMemberId = new Map<string | null, Document[]>()
+  for (const doc of documents) {
+    // A familyMemberId with no matching family member (e.g. a stale reference) is
+    // treated as unassigned rather than silently dropped from every group.
+    const key = doc.familyMemberId !== null && knownMemberIds.has(doc.familyMemberId) ? doc.familyMemberId : null
+    const existing = byMemberId.get(key)
+    if (existing) {
+      existing.push(doc)
+    } else {
+      byMemberId.set(key, [doc])
+    }
+  }
+
+  const groups: DocumentGroup[] = []
+  const unassigned = byMemberId.get(null)
+  if (unassigned) groups.push({ member: null, docs: unassigned })
+  for (const member of familyMembers) {
+    const docs = byMemberId.get(member.id)
+    if (docs) groups.push({ member, docs })
+  }
+  return groups
 }
 
 export default function DocumentsPage() {
@@ -70,21 +103,28 @@ export default function DocumentsPage() {
       )}
 
       {documents.length > 0 && (
-        <ul className={styles.list}>
-          {documents.map(doc => (
-            <DocumentItem
-              key={doc.id}
-              doc={doc}
-              familyMembers={familyMembers}
-              downloadUrl={downloadUrl(doc.id)}
-              extracting={extractingId === doc.id}
-              onPreview={setPreviewDoc}
-              onReassign={(id, familyMemberId) => void reassignDocument(id, familyMemberId)}
-              onDelete={id => void deleteDocument(id)}
-              onExtractEvents={d => void handleExtract(d)}
-            />
+        <div className={styles.groups}>
+          {groupDocuments(documents, familyMembers).map(group => (
+            <div key={group.member?.id ?? 'general'} className={styles.group}>
+              <DocumentGroupHeader member={group.member} />
+              <ul className={styles.list}>
+                {group.docs.map(doc => (
+                  <DocumentItem
+                    key={doc.id}
+                    doc={doc}
+                    familyMembers={familyMembers}
+                    downloadUrl={downloadUrl(doc.id)}
+                    extracting={extractingId === doc.id}
+                    onPreview={setPreviewDoc}
+                    onReassign={(id, familyMemberId) => void reassignDocument(id, familyMemberId)}
+                    onDelete={id => void deleteDocument(id)}
+                    onExtractEvents={d => void handleExtract(d)}
+                  />
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
 
       {modalOpen && (
@@ -108,6 +148,7 @@ export default function DocumentsPage() {
         <ExtractEventsModal
           filename={extraction.filename}
           candidates={extraction.candidates}
+          familyMembers={familyMembers}
           createEvent={createEvent}
           onDone={handleExtractionDone}
           onClose={() => setExtraction(null)}

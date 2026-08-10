@@ -3,30 +3,29 @@
 **Type:** Business Feature
 
 ## Story
-As a family member using the Familio calendar,
-I want to delete a calendar event I no longer need,
-so that outdated or wrongly created appointments don't clutter the shared family calendar.
+As a family member browsing the Documents page,
+I want documents grouped by the family member they're assigned to (with an "Allgemein" group for unassigned documents),
+so that I can quickly find documents relevant to a specific person instead of scanning one long flat list.
 
 ## Acceptance Criteria
 
-**AC1:** Given I open an existing calendar event for editing, when I look at the edit dialog, then I see a "Löschen" (delete) action.
+**AC1:** Given documents exist that are assigned to different family members, when I open the Documents page, then documents are displayed under section headers — one section per family member that has at least one document, plus an "Allgemein" section for documents with no assigned family member.
 
-**AC2:** Given I click "Löschen" on an existing event, when I have not yet confirmed, then the event is NOT deleted yet and I am asked to confirm the action.
+**AC2:** Given a document has no assigned family member, when I view the Documents page, then it appears under the "Allgemein" section (not hidden, not under a family member section).
 
-**AC3:** Given I confirm the delete action, when the deletion succeeds, then the event disappears from the calendar view (Month and Week) immediately and the edit dialog closes.
+**AC3:** Given all documents are assigned to family members (none unassigned), when I view the Documents page, then no empty "Allgemein" section is shown.
 
-**AC4:** Given I click "Löschen" by accident, when I cancel the confirmation instead of confirming, then the event is kept unchanged and the edit dialog stays open.
+**AC4:** Given I reassign a document to a different family member (or unassign it) via the existing assignment dropdown, when the reassignment succeeds, then the document immediately moves from its old group to its new group without a page reload.
 
-**AC5:** Given the delete request fails (e.g. network/server error), when the error occurs, then I see an error message and the event is NOT silently removed from my view.
+**AC5:** Given no documents exist at all, when I open the Documents page, then the existing "Keine Dokumente" empty state is shown as today (no group headers rendered for zero documents).
 
 ## Out of Scope
-- Deleting multiple events at once (bulk delete)
-- Deleting a single occurrence of a recurring event (Familio calendar events are not recurring today — no recurrence concept exists for `calendar_events`, unlike Tasks)
-- Undo/restore of a deleted event
-- Deleting events directly from the Month/Week view without opening the edit dialog (e.g. swipe-to-delete)
-- Android app (web-only in this iteration, consistent with prior calendar features)
+- Changing sort order *within* a group (documents within a group keep whatever order the API already returns them in, e.g. newest-first — unchanged)
+- Collapsible/expandable group sections (all groups always render fully expanded)
+- Changing the per-document assignment `<select>` dropdown's own wording (e.g. its "Nicht zugewiesen" option) — that control is unaffected, only the page-level grouping/section-header layer is new
+- Persisting a user's preferred group order across sessions (a fixed, deterministic order is fine — see BA for the exact ordering rule)
+- Android app (this already has grouping — see "Group Android documents by family member" — this story brings the webapp to parity with it, no further Android work)
 
 ## Notes
-- The backend already exposes `DELETE /api/events/{event_id}` (implemented, tested, unused by any frontend caller today).
-- This closes existing backlog item **FS-13: "Termin löschen — DELETE-Button im Edit-Modal"**.
-- The app already has an established 2-step inline delete-confirmation pattern (`TaskItem`) — BA/Architect should evaluate whether that exact pattern fits inside a modal footer or whether a lighter confirm-inline-in-modal approach is more appropriate.
+- This is a webapp parity story: the Android app already groups documents by assigned family member with an "Allgemein" group for unassigned ones (see the "Group Android documents by family member and add camera-scan upload" change) — the webapp should adopt the same grouping concept and the same "Allgemein" label for the unassigned group.
+- The webapp currently renders `documents` as one flat `<ul>` via `DocumentItem` in `DocumentsPage.tsx` — this is a purely additive grouping layer on top of that, no `DocumentItem` behavior changes expected.
