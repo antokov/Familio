@@ -80,6 +80,7 @@ vi.mock('../hooks/useDocuments', () => ({
     error: null,
     uploadDocument: vi.fn(),
     reassignDocument: vi.fn(),
+    renameDocument: vi.fn().mockResolvedValue(true),
     deleteDocument: vi.fn(),
     downloadUrl: (id: string) => `/api/documents/${id}/download`,
     viewUrl: (id: string) => `/api/documents/${id}/view`,

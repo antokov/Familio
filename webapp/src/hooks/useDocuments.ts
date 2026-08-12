@@ -90,6 +90,22 @@ export function useDocuments() {
     []
   )
 
+  const renameDocument = useCallback(async (id: string, filename: string): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/api/documents/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename }),
+      })
+      if (!res.ok) return false
+      const raw = (await res.json()) as Record<string, unknown>
+      setDocuments(prev => prev.map(d => (d.id === id ? fromApi(raw) : d)))
+      return true
+    } catch {
+      return false
+    }
+  }, [])
+
   const deleteDocument = useCallback(async (id: string): Promise<void> => {
     try {
       const res = await fetch(`${API_BASE}/api/documents/${id}`, { method: 'DELETE' })
@@ -131,6 +147,7 @@ export function useDocuments() {
     error,
     uploadDocument,
     reassignDocument,
+    renameDocument,
     deleteDocument,
     downloadUrl,
     viewUrl,

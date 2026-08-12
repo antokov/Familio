@@ -50,7 +50,7 @@ export function groupDocuments(documents: Document[], familyMembers: FamilyMembe
 }
 
 export default function DocumentsPage() {
-  const { documents, loading, error, uploadDocument, reassignDocument, deleteDocument, downloadUrl, viewUrl, extractEvents } = useDocuments()
+  const { documents, loading, error, uploadDocument, reassignDocument, renameDocument, deleteDocument, downloadUrl, viewUrl, extractEvents } = useDocuments()
   const { members: familyMembers } = useFamilyMembers()
   const { createEvent } = useEvents()
   const [modalOpen, setModalOpen] = useState(false)
@@ -117,6 +117,7 @@ export default function DocumentsPage() {
                     extracting={extractingId === doc.id}
                     onPreview={setPreviewDoc}
                     onReassign={(id, familyMemberId) => void reassignDocument(id, familyMemberId)}
+                    onRename={(id, filename) => renameDocument(id, filename)}
                     onDelete={id => void deleteDocument(id)}
                     onExtractEvents={d => void handleExtract(d)}
                   />

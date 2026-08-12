@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { FileText, Eye, Download, Trash2, CalendarPlus, Loader2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { FileText, Eye, Download, Trash2, CalendarPlus, Loader2, Pencil, Check, X } from 'lucide-react'
 import type { Document as FamilioDocument } from '../../types/document'
 import { isExtractable } from '../../types/document'
 import type { FamilyMember } from '../../types/family'
@@ -12,6 +12,7 @@ interface DocumentItemProps {
   extracting: boolean
   onPreview: (doc: FamilioDocument) => void
   onReassign: (id: string, familyMemberId: string | null) => void
+  onRename: (id: string, filename: string) => Promise<boolean>
   onDelete: (id: string) => void
   onExtractEvents: (doc: FamilioDocument) => void
 }
@@ -33,13 +34,64 @@ export function DocumentItem({
   extracting,
   onPreview,
   onReassign,
+  onRename,
   onDelete,
   onExtractEvents,
 }: DocumentItemProps) {
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [renameValue, setRenameValue] = useState(doc.filename)
+  const [renameSaving, setRenameSaving] = useState(false)
+  const [renameError, setRenameError] = useState<string | null>(null)
+  const renameInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (renaming) {
+      renameInputRef.current?.focus()
+      renameInputRef.current?.select()
+    }
+  }, [renaming])
 
   function handleDeleteConfirm() {
     onDelete(doc.id)
+  }
+
+  function handleRenameStart() {
+    setRenameValue(doc.filename)
+    setRenameError(null)
+    setRenaming(true)
+  }
+
+  function handleRenameCancel() {
+    setRenaming(false)
+    setRenameError(null)
+  }
+
+  async function handleRenameConfirm() {
+    const trimmed = renameValue.trim()
+    if (!trimmed) {
+      setRenameError('Name darf nicht leer sein.')
+      return
+    }
+    setRenameSaving(true)
+    setRenameError(null)
+    const ok = await onRename(doc.id, trimmed)
+    setRenameSaving(false)
+    if (ok) {
+      setRenaming(false)
+    } else {
+      setRenameError('Umbenennen fehlgeschlagen. Bitte erneut versuchen.')
+    }
+  }
+
+  function handleRenameKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      void handleRenameConfirm()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      handleRenameCancel()
+    }
   }
 
   return (
@@ -49,8 +101,23 @@ export function DocumentItem({
       </span>
 
       <div className={styles.content}>
-        <span className={styles.title}>{doc.filename}</span>
+        {renaming ? (
+          <input
+            ref={renameInputRef}
+            type="text"
+            className={styles.renameInput}
+            value={renameValue}
+            onChange={e => setRenameValue(e.target.value)}
+            onKeyDown={handleRenameKeyDown}
+            disabled={renameSaving}
+            maxLength={255}
+            aria-label={`Neuer Name für ${doc.filename}`}
+          />
+        ) : (
+          <span className={styles.title}>{doc.filename}</span>
+        )}
         <span className={styles.meta}>{formatSize(doc.sizeBytes)} · {formatDate(doc.uploadedAt)}</span>
+        {renameError && <span className={styles.renameError}>{renameError}</span>}
       </div>
 
       <select
@@ -70,6 +137,25 @@ export function DocumentItem({
           <span className={styles.confirmText}>Löschen?</span>
           <button className={styles.confirmBtn} onClick={handleDeleteConfirm}>Ja</button>
           <button className={styles.cancelBtn} onClick={() => setConfirmDelete(false)}>Nein</button>
+        </div>
+      ) : renaming ? (
+        <div className={styles.actions}>
+          <button
+            className={`${styles.actionBtn} ${styles.renameConfirmBtn}`}
+            onClick={() => void handleRenameConfirm()}
+            disabled={renameSaving}
+            aria-label="Umbenennen bestätigen"
+          >
+            <Check size={15} />
+          </button>
+          <button
+            className={styles.actionBtn}
+            onClick={handleRenameCancel}
+            disabled={renameSaving}
+            aria-label="Umbenennen abbrechen"
+          >
+            <X size={15} />
+          </button>
         </div>
       ) : (
         <div className={styles.actions}>
@@ -98,6 +184,13 @@ export function DocumentItem({
           >
             <Download size={15} />
           </a>
+          <button
+            className={styles.actionBtn}
+            onClick={handleRenameStart}
+            aria-label={`${doc.filename} umbenennen`}
+          >
+            <Pencil size={15} />
+          </button>
           <button
             className={`${styles.actionBtn} ${styles.deleteBtn}`}
             onClick={() => setConfirmDelete(true)}

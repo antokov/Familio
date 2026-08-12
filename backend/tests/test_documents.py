@@ -98,6 +98,49 @@ class TestUpdateDocument:
         resp = await client.put("/api/documents/nonexistent-id", json={"family_member_id": None})
         assert resp.status_code == 404
 
+    async def test_rename(self, client: AsyncClient):
+        upload_resp = await upload_file(client)
+        doc_id = upload_resp.json()["id"]
+        resp = await client.put(f"/api/documents/{doc_id}", json={"filename": "Steuerbescheid 2026.pdf"})
+        assert resp.status_code == 200
+        assert resp.json()["filename"] == "Steuerbescheid 2026.pdf"
+
+    async def test_rename_trims_whitespace(self, client: AsyncClient):
+        upload_resp = await upload_file(client)
+        doc_id = upload_resp.json()["id"]
+        resp = await client.put(f"/api/documents/{doc_id}", json={"filename": "  Notiz.pdf  "})
+        assert resp.status_code == 200
+        assert resp.json()["filename"] == "Notiz.pdf"
+
+    async def test_rename_empty_rejected(self, client: AsyncClient):
+        upload_resp = await upload_file(client)
+        doc_id = upload_resp.json()["id"]
+        resp = await client.put(f"/api/documents/{doc_id}", json={"filename": ""})
+        assert resp.status_code == 422
+
+    async def test_rename_whitespace_only_rejected(self, client: AsyncClient):
+        upload_resp = await upload_file(client)
+        doc_id = upload_resp.json()["id"]
+        resp = await client.put(f"/api/documents/{doc_id}", json={"filename": "   "})
+        assert resp.status_code == 422
+
+    async def test_rename_over_max_length_rejected(self, client: AsyncClient):
+        upload_resp = await upload_file(client)
+        doc_id = upload_resp.json()["id"]
+        resp = await client.put(f"/api/documents/{doc_id}", json={"filename": "a" * 256})
+        assert resp.status_code == 422
+
+    async def test_rename_does_not_change_stored_filename_or_content(self, client: AsyncClient):
+        upload_resp = await upload_file(client, content=b"original bytes")
+        doc_id = upload_resp.json()["id"]
+        before = upload_resp.json()
+        resp = await client.put(f"/api/documents/{doc_id}", json={"filename": "renamed.pdf"})
+        assert resp.status_code == 200
+        assert resp.json()["content_type"] == before["content_type"]
+        assert resp.json()["size_bytes"] == before["size_bytes"]
+        download = await client.get(f"/api/documents/{doc_id}/download")
+        assert download.content == b"original bytes"
+
 
 class TestDownloadDocument:
     async def test_download_returns_original_content(self, client: AsyncClient):
