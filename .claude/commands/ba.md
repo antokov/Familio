@@ -21,6 +21,7 @@ Read `.claude/workspace/story.md`
 2. **Edge Cases**
    List all non-obvious scenarios that could break the feature.
    Format: `EC-01: [scenario description]`
+   — If the story deletes, renames, or relocates a shared exported constant/function/type/component, explicitly name "existing consumers of [symbol]" as one of the edge cases — this gives Architect a documented starting point instead of a cold grep (see TD-07: `EventFormModal` was missed as a `FAMILY_MEMBERS` consumer during FS-22 until late in that story)
 
 3. **Data Model Implications**
    - New fields required

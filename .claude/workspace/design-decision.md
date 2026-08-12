@@ -1,3 +1,3 @@
-# Design Decision — FamilyMemberFormModal Unit Tests (TD-06)
+# Design Decision — DocumentUploadModal + DocumentsPage Render Tests (TD-13)
 
-**Phase 3b skipped for this story.** See `arch-decision.md`'s "Phase 3b (Design) — Explicitly Skipped" section: this story adds a single `.test.tsx` file exercising *existing* UI — no new component, DOM, or CSS. This file intentionally overwrites the previous feature's stale design decision so Dev doesn't mistake old content for current guidance.
+**Phase 3b not applicable for this story.** Both new files (`DocumentUploadModal.test.tsx`, `DocumentsPage.test.tsx`) are test-only — no production UI/CSS changes. Same reasoning as every prior test-coverage story this session.

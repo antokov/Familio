@@ -1,26 +1,31 @@
-# Dev Implementation Report — FamilyMemberFormModal Unit Tests (TD-06)
+# Dev Implementation Report — DocumentUploadModal + DocumentsPage Render Tests (TD-13)
 
 ## Approach
-Added `webapp/src/components/FamilyMemberFormModal/FamilyMemberFormModal.test.tsx` (new file, 23 tests) covering all 5 ACs: create-mode defaults, edit-mode pre-fill (with a deliberately non-default color to catch a "always defaults to swatch 0" class of bug), live initials uppercasing/truncation, swatch selection + preview sync, the two-layer empty-field guard (disabled button AND `handleSubmit`'s own independent trim-check via a raw `fireEvent.submit`), full submit flow (payload shape, success-closes, error-string-displays-inline), the double-submit guard (deferred-promise pattern), and backdrop-vs-inside-content close behavior. Followed `TaskFormModal.test.tsx`'s Create/Edit `describe` split and `EventFormModal.test.tsx`'s deferred-promise technique (already reused once for TD-10) per `arch-decision.md`. No production code (`FamilyMemberFormModal.tsx`) was touched.
+Added two new test files per `arch-decision.md`: `DocumentUploadModal.test.tsx` (12 tests, structured directly on `FamilyMemberFormModal.test.tsx`'s template given the near-identical component shape) and `DocumentsPage.test.tsx` (16 tests, structured on `SettingsPage.test.tsx`'s hook-mocking convention, extended with a mocked `ExtractEventsModal` stand-in per `analysis.md`'s resolved Open Question). No production code (`DocumentUploadModal.tsx`/`DocumentsPage.tsx`) was touched.
 
 ## Files Changed
-- `webapp/src/components/FamilyMemberFormModal/FamilyMemberFormModal.test.tsx` (new) — 23 tests across 7 `describe` blocks.
+- `webapp/src/components/DocumentUploadModal/DocumentUploadModal.test.tsx` (new) — 12 tests.
+- `webapp/src/pages/DocumentsPage.test.tsx` (new) — 16 tests.
 
 ## Assumptions Made
-- Per `analysis.md`'s investigated-and-closed Open Question, did **not** write an `onSave`-rejects test — confirmed by reading `useFamilyMembers.ts` (the real `addMember`/`editMember` wired into this modal in production via `SettingsPage.tsx`) that both already wrap their entire body in `try/catch` and always resolve with `string | null`, never reject. No TD-10-style unhandled-rejection risk here.
-- Used the real 409-conflict error string (`"Diese Initialen sind bereits vergeben"`) from `useFamilyMembers.addMember` for the inline-error test, grounding it in an actual production scenario rather than an arbitrary placeholder.
-- Tested the empty-field guard two ways: the disabled submit button (the normal UI path) AND a raw `fireEvent.submit()` on the `<form>` element bypassing the button entirely, to independently verify `handleSubmit`'s own `!trimmedName || !trimmedInitials` early-return — per `analysis.md`'s Business Rule 5 ("defense in depth", not merely relying on the disabled attribute).
+- **`ExtractEventsModal` mocking (new technique for this codebase):** `vi.mock('../components/ExtractEventsModal/ExtractEventsModal', ...)` replaces it with a minimal stand-in exposing `filename`/`candidates.length` as `data-testid` text and two buttons that directly invoke the real `onDone`/`onClose` props it received. This proves `DocumentsPage` wires the real callback and passes the right data, without re-testing `ExtractEventsModal`'s own 20-test-covered internal review/confirm flow — exactly the boundary `analysis.md` recommended.
+- Hook mocks (`useDocuments`/`useFamilyMembers`/`useEvents`) are `vi.fn()`-backed (not static objects like `SettingsPage.test.tsx`'s single `useFamilyMembers` mock) so each test can reconfigure `documents`/`loading`/`error`/`extractEvents` via `vi.mocked(useDocuments).mockReturnValue(...)` — necessary here since `DocumentsPage`'s tests need many different hook states, unlike `SettingsPage`'s single fixed fixture.
+- Multi-document/multi-group fixtures (`DOC_UNASSIGNED`, `DOC_MEMBER_A`, `DOC_MEMBER_B`, `MEMBER_A`, `MEMBER_B`) are shared module-level constants reused across tests, per `arch-decision.md`'s guidance to avoid one-off inline arrays.
 
 ## Deviations from arch-decision.md
-One minor, self-corrected deviation — same class of issue as TD-08's report: the two double-submit tests (deferred-promise pattern) initially resolved the pending promise at the very end of the test without waiting for the resulting state update, leaving a dangling `act()`-unwrapped update. Fixed by wrapping the resolution in `await act(async () => resolveSave(null))`. General async-test hygiene fix, not a pattern deviation from `arch-decision.md`.
+Two real, unanticipated jsdom/tooling issues discovered and worked around during implementation — both fixed within the test files, no scope or production-code impact:
+
+1. **`DocumentUploadModal.test.tsx` — jsdom `required`-file-input validity bug.** This jsdom version's `validity.valueMissing` never clears on a `required` `<input type="file">` even after `userEvent.upload()` correctly sets `.files`. A real `userEvent.click()` on the submit button therefore never reaches native form submission (`onSave` was called 0 times in every submission test on first attempt). Root-caused via a standalone diagnostic before touching the real test file (confirmed `files.length === 1` but `validity.valid === false` after upload; confirmed `fireEvent.submit(form)` — which bypasses native constraint validation entirely, unlike a real click — reliably fires the handler). Fixed by adding a documented `submitForm(container)` helper using `fireEvent.submit`, reserving `userEvent.click` only for interactions that don't depend on native form validity (the double-submit guard test specifically still uses a real click on the *disabled* button, since that's the actual UI-level protection this component relies on — it has no internal `saving`-state re-entry guard, same finding as `FamilyMemberFormModal`, TD-06).
+2. **`DocumentsPage.test.tsx` — spurious "not configured to support act(...)" warning.** Several tests wrapped an already-`act`-instrumented `userEvent.click()` call inside an additional manual `act(async () => { await user.click(...) })`. `@testing-library/user-event` v14 already act-wraps its interactions internally; the redundant outer wrapper triggered React's "environment not configured" warning (tests still passed, but the warning signals a real anti-pattern worth not shipping). Removed the redundant wrapper everywhere a plain `await user.click(...)` sufficed, keeping manual `act()` only where actually needed (resolving a deliberately-deferred promise from outside any `userEvent` call).
 
 ## Technical Debt / Follow-up
-None new. Confirmed (see Assumptions) that `FamilyMemberFormModal.tsx`'s lack of a `try/catch` around `await onSave(...)` is safe given its real-world callers — no TD-10-equivalent bug found here.
+None new. Confirmed no bugs in `DocumentUploadModal.tsx`/`DocumentsPage.tsx` — `handleExtract`'s error-clearing-on-new-attempt behavior, the singular/plural boundary at exactly `1`, and the per-document `extracting` scoping all work as `analysis.md` described.
 
 ## Open Items
 None requiring human input.
 
 ## Verification
-- `npx vitest run src/components/FamilyMemberFormModal`: 23/23 passed, no `act()` warnings.
-- `npx vitest run` (full webapp suite): 285/285 passed (22 test files, up from 262/21 before this story).
+- `npx vitest run src/components/DocumentUploadModal`: 12/12 passed, no warnings.
+- `npx vitest run src/pages/DocumentsPage.test.tsx`: 16/16 passed, no warnings.
+- `npx vitest run` (full webapp suite): 323/323 passed.
 - `npx tsc --noEmit`: clean.

@@ -25,20 +25,26 @@ find src -type f -name "*.ts" -o -name "*.tsx" -o -name "*.py" | head -60
 1. **Identify existing code to reuse or extend**
    — List files and explain what they already do
 
-2. **Define exactly which files Dev will touch**
+2. **If the story deletes, renames, or relocates an exported constant, function, type, or component: grep the codebase for every import of that symbol's exact name before finalizing "Files Dev Will Modify"**
+   — Search by symbol name, not by file path — deleting a file doesn't tell you who imported *from* it
+   — Every consumer file the grep finds must be added to "Files Dev Will Touch" or "Reference Files for Dev Context" below — running the grep isn't enough, its results must change the output
+   — Skip this step entirely if nothing is being deleted/renamed/relocated — it is not a general-purpose grep-everything step
+   — *Why:* FS-22 (Familienmitglieder-CRUD) deleted `constants/family.ts`'s `FAMILY_MEMBERS` and migrated 3 of its 4 real consumers before `EventFormModal` was found as a 4th, late — this step exists to catch that class of miss during scoping, not during implementation
+
+3. **Define exactly which files Dev will touch**
    — "Files to Modify": existing files that need changes
    — "New Files to Create": new files with their purpose
 
-3. **Define patterns Dev must follow**
+4. **Define patterns Dev must follow**
    — Naming conventions, folder structure, design patterns in use
 
-4. **Define constraints (what NOT to do)**
+5. **Define constraints (what NOT to do)**
    — Anti-patterns to avoid, files not to touch, no new dependencies without approval
 
-5. **List reference files Dev needs in context**
+6. **List reference files Dev needs in context**
    — Max 5–8 files Dev should read before starting
 
-6. **Flag architecture risks**
+7. **Flag architecture risks**
    — Anything that would require a larger structural change than expected
    — Mark as BLOCKING if human decision needed
 
