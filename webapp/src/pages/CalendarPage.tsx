@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
-import { MonthView } from '../components/MonthView/MonthView'
+import { MonthView, getMonthGridRange } from '../components/MonthView/MonthView'
 import { WeekView } from '../components/WeekView/WeekView'
 import { EventFormModal } from '../components/EventFormModal/EventFormModal'
 import { useEvents } from '../hooks/useEvents'
@@ -43,10 +43,8 @@ export default function CalendarPage() {
 
   const loadForCurrentView = useCallback(() => {
     if (view === 'month') {
-      const from = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-01`
-      const lastDay = new Date(selectedDate.getFullYear(), selectedDate.getMonth() + 1, 0).getDate()
-      const to = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-      fetchEvents(from, to)
+      const { start, end } = getMonthGridRange(selectedDate.getFullYear(), selectedDate.getMonth())
+      fetchEvents(toLocalDateStr(start), toLocalDateStr(end))
     } else {
       const ws = getWeekStart(selectedDate)
       const we = new Date(ws)
@@ -69,6 +67,15 @@ export default function CalendarPage() {
       }
       return d
     })
+  }
+
+  function handleDayClick(dateStr: string, isCurrentMonth: boolean) {
+    if (isCurrentMonth) {
+      openNewModal(dateStr)
+      return
+    }
+    const [y, m] = dateStr.split('-').map(Number)
+    setSelectedDate(new Date(y, m - 1, 1))
   }
 
   function openNewModal(date?: string, time?: string) {
@@ -167,7 +174,7 @@ export default function CalendarPage() {
           month={selectedDate.getMonth()}
           events={events}
           today={today}
-          onDayClick={date => openNewModal(date)}
+          onDayClick={handleDayClick}
           onEventClick={openEditModal}
         />
       )}

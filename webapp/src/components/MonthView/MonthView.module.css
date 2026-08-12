@@ -30,12 +30,16 @@
   background-color: var(--color-surface-alt);
 }
 
+.cellOtherMonth {
+  background-color: var(--color-bg);
+}
+
 .cellOtherMonth .dayNumber {
   color: var(--color-text-muted);
 }
 
-.cellOtherMonth {
-  background-color: transparent;
+.cellOtherMonth .pill {
+  opacity: 0.55;
 }
 
 .dayNumber {

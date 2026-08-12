@@ -8,11 +8,12 @@ interface MonthViewProps {
   month: number
   events: CalendarEvent[]
   today: string
-  onDayClick: (dateStr: string) => void
+  onDayClick: (dateStr: string, isCurrentMonth: boolean) => void
   onEventClick: (event: CalendarEvent) => void
 }
 
-function getMonthGrid(year: number, month: number): Date[] {
+/** The full rendered grid range for a month, including leading/trailing spillover days. */
+export function getMonthGridRange(year: number, month: number): { start: Date; end: Date } {
   const first = new Date(year, month, 1)
   // 0=Sun→6, 1=Mon→0, …, shift so Mon=0
   const startDow = (first.getDay() + 6) % 7
@@ -21,6 +22,12 @@ function getMonthGrid(year: number, month: number): Date[] {
   const last = new Date(year, month + 1, 0)
   const endDow = (last.getDay() + 6) % 7
   const end = new Date(year, month + 1, endDow === 6 ? 0 : 6 - endDow)
+
+  return { start, end }
+}
+
+function getMonthGrid(year: number, month: number): Date[] {
+  const { start, end } = getMonthGridRange(year, month)
 
   const days: Date[] = []
   const cur = new Date(start)
@@ -85,7 +92,7 @@ export function MonthView({ year, month, events, today, onDayClick, onEventClick
           <div
             key={dateStr}
             className={`${styles.cell} ${!isCurrentMonth ? styles.cellOtherMonth : ''}`}
-            onClick={() => onDayClick(dateStr)}
+            onClick={() => onDayClick(dateStr, isCurrentMonth)}
           >
             <span className={`${styles.dayNumber} ${isToday ? styles.today : ''}`}>
               {date.getDate()}

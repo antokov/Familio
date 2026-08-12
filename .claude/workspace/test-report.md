@@ -1,49 +1,33 @@
-# Test Report — Push-Benachrichtigung für morgige Kalendertermine (21:00 Uhr)
+# QA Test Report — Month View: Boundary, Navigation, Spillover Events
 
-## Acceptance Criteria Check
+## Verdict: **PASS** ✅
 
-| AC | Status | Comment |
-|----|--------|---------|
-| AC1: events tomorrow → 21:00 push listing title+time/Ganztägig | ✅ PASS (up to the publish boundary) | Verified via `test_events_tomorrow_publishes_to_ntfy`, `test_all_day_event_shown_as_ganztaegig`, `test_multiple_events_tomorrow_are_all_listed`: correct body format, correct ntfy URL/topic, `Click` header set. Confirmed the scheduler wiring itself doesn't crash app boot via a live `uvicorn` smoke test (`/health` responded 200, no errors in the startup log). **What is NOT verified by this codebase**: actual device receipt — that depends on a self-hosted ntfy instance existing (it doesn't, anywhere in this repo/deployment yet) and each device having subscribed via the separately-installed ntfy app. This is an infra/deployment gap already called out in `impl-report.md`, not a code defect. |
-| AC2: no events tomorrow → no notification | ✅ PASS | `test_no_events_skips_send`. |
-| AC3: tap notification → opens app to calendar | ✅ PASS (build-verified only) | Backend always sets `Click: familio://calendar`. Android: `AndroidManifest.xml` intent-filter + `MainActivity.toDeepLinkRoute()` + `MainScreen`'s `LaunchedEffect` correctly route to `FamilioDestination.Calendar` — verified by `:app:assembleDebug`/`:app:compileDebugKotlin` succeeding and manual code trace (`android:host="calendar"` matches `Uri` for `familio://calendar`; `singleTask` + `onNewIntent`/`setIntent` correctly handles the already-running-app case). **Not covered by an automated test** — the Android module has zero test infrastructure anywhere in this repo (no `app/src/test`, no `app/src/androidTest`, confirmed by search), consistent with `CLAUDE.md`'s "Current State" already stating Android automated tests are "noch nicht erledigt." Adding a first-ever Android test harness (JUnit/Robolectric, since `Intent`/`Uri` parsing needs a Context or at least `Uri.parse`, which is Android-framework-backed) is out of scope for `arch-decision.md`, which didn't list test-infra setup as a Dev task — flagged as a coverage gap, not a blocker. |
-| AC4: broadcast to every family member's device | ✅ PASS (architectural, not code-testable) | By design (per `arch-decision.md`), the backend has no concept of "family member's device" — it publishes once to a shared ntfy topic, and every device subscribed to that topic receives it. This is a property of the ntfy protocol itself, not application logic, so there's nothing in this codebase to unit-test for it. |
-| AC5: no notification permission → silent no-op, no error elsewhere | ✅ PASS (by design) | Notification permission/delivery is entirely owned by the separately-installed ntfy app + Android OS, never by Familio's own code — Familio has no notification-permission-handling code to test because it was deliberately never given that responsibility (per `arch-decision.md`'s ntfy-based approach). Confirmed no error path in Familio's own code could surface such a failure (the deep-link handler no-ops silently on a non-matching/absent intent — `toDeepLinkRoute()` returns `null`, `MainScreen`'s `LaunchedEffect` does nothing when `pendingDeepLinkRoute == null`). |
+## Acceptance Criteria Verification
 
-## Edge Case Coverage
+| AC | Description | Result |
+|----|--------------|--------|
+| AC1 | Spillover cells (trailing July / leading September in an August grid) are visibly de-emphasized as whole cells, not just the day number | **PASS** — `.cellOtherMonth` now sets `background-color: var(--color-bg)` on the whole cell and `opacity: 0.55` on its pills, in addition to the pre-existing muted day-number color. Verified by reading the final CSS and confirming it matches `design-decision.md`'s token mapping exactly. |
+| AC2 | Clicking a greyed spillover day (e.g. a July day while viewing August) navigates to that month with the day visible, and does NOT open the create-event modal | **PASS** — `MonthView.test.tsx`: "ruft onDayClick mit isCurrentMonth=false …" (both next-month and previous-month cases) confirm `onDayClick` fires with `isCurrentMonth: false` and the correct target `dateStr`. `CalendarPage.tsx`'s `handleDayClick` routes `isCurrentMonth === false` straight to `setSelectedDate`, never calling `openNewModal` — read and confirmed directly in the diff. |
+| AC3 | Clicking a normal current-month day is unchanged (opens create-event modal) | **PASS** — `MonthView.test.tsx`: "ruft onDayClick mit isCurrentMonth=true …" confirms the flag; `CalendarPage.tsx`'s `handleDayClick` calls `openNewModal(dateStr)` unchanged when `isCurrentMonth` is true. |
+| AC4 | An event on Sept 2 is visible when Sept 2 renders as a spillover day in August's grid | **PASS** — `MonthView.test.tsx`: "zeigt einen Termin am 2. September auch als Nachlauftag …" renders the event and asserts it's present. Root cause (fetch window not covering spillover days) is fixed in `CalendarPage.tsx` by sourcing the month-view fetch range from `getMonthGridRange()` instead of `[1st, last day]`. |
+| AC5 | Week view is unaffected | **PASS** — confirmed no changes to `WeekView.tsx` or the `view === 'week'` branch of `loadForCurrentView()` in the diff; full `webapp` test suite (which includes `WeekView.test.tsx`, 17 tests) still passes unmodified. |
 
-| Edge Case | Covered? | Test Added? | Comment |
-|-----------|----------|-------------|---------|
-| EC-01: device offline at 21:00 | N/A (accepted gap) | — | Out of scope by design, no code path to test. |
-| EC-02: event edited/deleted after 21:00 | N/A (accepted gap) | — | Snapshot-at-send-time is inherent; nothing to assert beyond "the query runs once." |
-| EC-03: event created/moved to tomorrow after 21:00 fired | N/A (accepted gap) | — | Documented gap in `analysis.md`, no code needed either way. |
-| EC-04: multi-day all-day event spanning into tomorrow | ✅ Yes | ✅ Yes (Dev) | `test_multi_day_all_day_event_spanning_tomorrow_is_included`. |
-| EC-05 / EC-09: stale/invalid token, revoked permission | N/A (out of Familio's control by design) | — | ntfy/OS responsibility, not backend-trackable per architecture. |
-| EC-06: no devices registered / nobody subscribed | ✅ Yes (the "unconfigured" half) | ✅ Yes (Dev) | `test_ntfy_not_configured_skips_send` covers "nobody set up ntfy at all." "ntfy configured but zero topic subscribers" is invisible to the backend (ntfy just delivers to nobody) — nothing to test. |
-| EC-07: backend down at 21:00 | N/A (accepted gap) | — | No catch-up logic in scope. |
-| EC-08: timezone consistency (server-local "tomorrow"/"21:00") | ✅ Yes | ✅ Yes (Tester, new) | `test_event_starting_exactly_day_after_tomorrow_is_excluded` pins the exact exclusive upper boundary (`start_dt < range_end`) so a future timezone/boundary regression would be caught. |
-| EC-10: multiple devices per family member | N/A (architectural) | — | Same ntfy pub/sub property as AC4 — not testable at this layer. |
+## Edge Cases (from analysis.md)
 
-## Tests Written
+1. **Multi-day event spanning framed + spillover days** — Not directly re-tested here, but covered transitively: `eventDateKeys()` (unchanged) already expands multi-day all-day events across every date key they touch, and the wider fetch window now supplies spillover-day event data too. Existing `MonthView.test.tsx` "Mehrtägige ganztägige Termine" suite (3-day event rendering) plus the new spillover-event test together give reasonable confidence; no seam-specific bug found on inspection.
+2. **Spillover day that is also "today"** (e.g. viewing September while today is the trailing Aug 31 spillover day) — **Pre-existing minor contrast issue found, not a regression**: `.cellOtherMonth .dayNumber { color: var(--color-text-muted) }` (specificity 0,2,0) beats `.today { color: #fff }` (specificity 0,1,0), so a today-badge on a spillover day would render muted text on the primary-green circle instead of white text. This rule existed before this story (unchanged by this diff) and isn't required by any AC — flagging as tech debt for Phase 6, not a blocker.
+3. **Fetch window recomputed per navigation** — `useCallback` dependency array (`[view, selectedDate, fetchEvents]`) is unchanged; `getMonthGridRange` is called fresh from the current `selectedDate` on every invocation, no staleness risk introduced.
+4. **Month needing zero/near-zero spillover** — Covered generically by the new "beginnt immer auf einem Montag und endet immer auf einem Sonntag" invariant test (Feb 2027) rather than hunting for an exact zero-spillover month; the shared math guarantees a well-formed range regardless.
+5. **Year-boundary spillover navigation** — **Explicitly added test coverage** (was a gap in Dev's initial test pass): confirmed Dec 2026 framed → clicking the Jan 3, 2027 spillover cell yields `onDayClick('2027-01-03', false)`, and Jan 2027 framed → clicking the Dec 28, 2026 spillover cell yields `onDayClick('2026-12-28', false)`. Both pass.
+6. **`+N weitere` overflow on a spillover day** — No dedicated new test, but logic path is unchanged (`eventsByDay` mapping + slice(0,3) is identical for both cell types); existing overflow test (`MonthView — Mehrtägige ganztägige Termine`) already exercises the mechanism generally. Low risk, not blocking.
+7. **Week view unaffected** — Confirmed (see AC5).
 
-| Test Name | Type | What it covers |
-|-----------|------|----------------|
-| `test_event_starting_exactly_day_after_tomorrow_is_excluded` | Unit | EC-08 boundary: an event starting exactly at tomorrow's end (day-after midnight) must NOT be included — pins the exclusive `<` boundary in the range query. |
-| `test_multiple_events_tomorrow_are_all_listed` | Unit | AC1: two events tomorrow both appear in one notification body, not just the first/last. |
-| `test_custom_ntfy_topic_is_used_in_url` | Unit | Confirms `settings.ntfy_topic` is actually threaded into the publish URL, not hardcoded. |
-| `test_ntfy_settings_default_to_disabled_url_and_shared_topic_name` | Unit | Confirms a fresh `Settings()` (no env vars set) defaults to `ntfy_url=None` — i.e. the feature is inert-by-default until a human deploys ntfy and sets the env var, matching the "silent no-op until configured" design intent. |
-| Live `uvicorn` boot smoke test (manual, not a pytest test) | Integration | Confirmed `AsyncIOScheduler.start()`/`.shutdown()` inside FastAPI's `lifespan` doesn't crash app startup — this path is otherwise **never exercised** by the existing test suite, since `conftest.py`'s `client` fixture explicitly uses `ASGITransport` which does not trigger lifespan events. This was the single highest-risk untested path (a scheduler wiring bug would have meant the whole app fails to boot in production) and is now verified. |
+## New Tests Added (this phase)
+- 2 year-boundary click-routing tests in `MonthView.test.tsx` (Dec→Jan and Jan→Dec), closing the gap identified in edge case #5 above. Combined with Dev's 9 new tests, `MonthView.test.tsx` now has 13 tests (was 7).
 
-## Coverage Gaps
+## Coverage Gaps (non-blocking, noted for backlog)
+- `CalendarPage.tsx` has no dedicated test file (pre-existing, tracked as FS-16) — the new fetch-range and click-routing logic is verified indirectly through `MonthView.test.tsx`'s coverage of the shared `getMonthGridRange` helper and the `onDayClick(dateStr, isCurrentMonth)` contract, not through a `CalendarPage`-level render test. Per `arch-decision.md`, building that harness was explicitly out of scope for this story.
+- The today+spillover contrast issue (edge case #2) has no regression test since it's a pre-existing, non-regressed condition outside this story's scope.
 
-- **AC3's Android deep-link routing has no automated test** — reason: zero Android test infrastructure exists anywhere in this repo yet (no `app/src/test`/`app/src/androidTest` directories), and standing one up (JUnit + Robolectric, since `Uri`/`Intent` parsing needs an Android framework shim) is a repo-wide first-time investment `arch-decision.md` did not scope into this story. Verified instead via full `:app:assembleDebug` build success + manual code trace. Recommend as a follow-up story if Android test coverage becomes a priority (ties into the existing open item "danach ggf. E2E-Tests (Web) oder Auth" / general Android-testing gap already noted in `CLAUDE.md`'s Current State).
-- **The lifespan/scheduler startup path is only manually smoke-tested, not covered by an automated regression test** — `conftest.py`'s `ASGITransport`-based fixture bypasses `lifespan` entirely (pre-existing, documented behavior, not something this story should change). A `pytest-asyncio` test that spins up a real `uvicorn`/lifespan context to assert the scheduler job is registered would require restructuring the test fixture in a way that's out of this story's scope (it would affect every other test file too) — flagging as a `TD` candidate for Phase 6 rather than doing it here.
-- **No test proves the actual ntfy HTTP request reaches a real ntfy server** — deliberately: no ntfy instance exists anywhere in this deployment yet (per `impl-report.md`), so there is nothing live to test against. All tests mock `httpx.AsyncClient.post`.
-
-## Bugs Found
-
-None. Full regression run: 139/139 backend tests pass (128 pre-existing/unrelated + 11 new/notifications), `:app:assembleDebug` succeeds with no warnings surfaced as errors.
-
-## Overall Verdict
-
-**PASS ✅** — all 5 acceptance criteria are satisfied within what this codebase is actually responsible for (the backend-to-ntfy publish boundary and the Android deep-link handler); the parts of AC1/AC4/AC5 that depend on external, not-yet-deployed infrastructure (a live ntfy server, per-device ntfy-app subscriptions) are architecturally sound but require a human deployment step already flagged in `impl-report.md` and `blockers.md`'s resolution notes — this is an ops/deployment gap, not an implementation defect, so it does not fail the story. One legitimate coverage gap (no Android automated tests exist in this repo) is documented above but is a pre-existing, repo-wide gap, not something introduced or worsened by this story.
+## Full Suite Result
+`npx vitest run` (whole `webapp/` project): **225/225 tests passed**, 19 test files (up from 223/19 pre-QA-phase, reflecting the 2 new tests added in this phase). `npx tsc --noEmit`: clean.

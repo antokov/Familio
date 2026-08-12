@@ -1,32 +1,33 @@
 # User Story
 
-**Type:** Business Feature
+**Type:** Bug Fix + UX Enhancement
 
 ## Story
-As a family member using the Familio Android app,
-I want to receive a push notification every day at 21:00 listing tomorrow's calendar events (if any),
-so that I don't have to open the app to remember what's coming up the next day.
+As a family member viewing the month calendar,
+I want days from the previous/next month (shown to fill out the grid) to be visually distinct from the current month, clickable to jump to that month, and to actually show their events,
+so that I can tell at a glance what belongs to the current month and don't miss appointments that happen to fall on a "spillover" day at the edge of the grid.
 
 ## Acceptance Criteria
 
-**AC1:** Given I have at least one calendar event scheduled for tomorrow, when it becomes 21:00 today, then I receive a push notification on my Android device listing the event(s) happening tomorrow (title + time, or "ganztägig" for all-day events).
+**AC1:** Given I am viewing the Month view for August, when the grid renders the trailing days of July and the leading days of September to fill the first/last week, then those cells are visibly greyed out / de-emphasized compared to August's own days (not just the day number — the whole cell reads as "not this month").
 
-**AC2:** Given I have no calendar events scheduled for tomorrow, when it becomes 21:00 today, then I do NOT receive a push notification (no empty/noise notification).
+**AC2:** Given I click on a greyed-out day belonging to July (while viewing August), when the click registers, then the calendar navigates to July with that day visible — it does NOT open the "create new event" modal.
 
-**AC3:** Given I receive the 21:00 notification, when I tap it, then the app opens to the calendar view (so I can see the full details of tomorrow's events).
+**AC3:** Given I click on a normal (current-month) day, when the click registers, then existing behavior is unchanged — the "create new event" modal opens pre-filled with that date.
 
-**AC4:** Given multiple family members share the calendar, when the 21:00 notification is sent, then each family member's device that has the app installed and notifications enabled receives it — not just the person who created the events.
+**AC4:** Given I have a calendar event on September 2nd, when I view the August month grid (which shows September 2nd as a trailing/spillover day), then that event's pill is visible on that day cell, exactly as it would be if I navigated to September.
 
-**AC5:** Given I have not granted the app notification permission (or have disabled notifications in device/app settings), when 21:00 arrives, then no notification is delivered to my device and no error is shown elsewhere in the app (silent no-op for that device).
+**AC5:** Given the Week view already shows adjacent-month dates in its own header/day cells (e.g. a week spanning July 28 – Aug 3), when applicable, then the same "belongs to a different month than the one currently framed" visual treatment is not required for Week view — this story is scoped to Month view only (Week view has no equivalent "current month" framing to begin with).
 
 ## Out of Scope
-- Push notifications in the WebApp (browser/PWA Web Push) — Android-only in this iteration; a webapp follow-up story can reuse the backend piece if one is introduced
-- User-configurable notification time (e.g. changing "21:00" to a different hour) — the time is fixed for this iteration
-- Per-event or per-category notification preferences (e.g. muting certain calendar entries) — it's all-or-nothing based on the device's notification permission
-- Notifications for anything other than "tomorrow's events" (e.g. reminders X minutes before an event, weekly digests, task/shopping-list notifications)
-- Retrying/guaranteeing delivery if the device is offline at 21:00 — best-effort push delivery only
+- Week view changes — Week view doesn't have a "current month" concept the way Month view's grid does; no changes there.
+- Changing what counts as "today" or the today-highlight styling — that's separate from the current/other-month distinction.
+- Any change to event creation/editing behavior for current-month days.
+- Multi-month or year view.
 
 ## Notes
-- No existing push-notification infrastructure was found in the codebase (no FCM/Firebase references, no notification scheduling on the backend). This story likely requires introducing that infrastructure end-to-end (device token registration, a backend-side daily trigger at 21:00, and the Android push receiver) — Architect should confirm the concrete approach (e.g. Firebase Cloud Messaging vs. an alternative) and flag if this needs to be split into an Enabler story for the underlying push infrastructure plus a smaller Business Feature story for the "tomorrow's events" content/logic on top of it.
-- "Tomorrow" should be evaluated based on the family's/server's local timezone, consistent with how the rest of the calendar already treats event times as naive wall-clock time (see `CLAUDE.md` "Timezone-Fix" note) — Architect/BA to confirm the exact boundary given the app is self-hosted on a single NAS (no per-user timezone concept currently exists).
-- All-day events (`all_day: true`, including multi-day ones spanning into/through tomorrow) should count as "an event tomorrow" for AC1 — exact wording/format of the notification body is a Dev/Design decision, not prescribed here.
+- Root cause investigation (read `MonthView.tsx`, `MonthView.module.css`, `CalendarPage.tsx`) found three separate small bugs/gaps behind this one user-reported symptom:
+  1. `MonthView.module.css`'s `.cellOtherMonth` only dims the day-number text color; the cell background/pills are unchanged, so the "greyed out" effect is barely visible today.
+  2. `CalendarPage.tsx`'s `onDayClick` always calls `openNewModal(date)`, regardless of whether the clicked day belongs to the currently-framed month or a neighboring one — there is currently no "navigate to that month" behavior at all for spillover days.
+  3. `CalendarPage.tsx`'s `loadForCurrentView()` fetches events strictly bounded to `[first day of month, last day of month]`, not the full rendered grid range that `MonthView.getMonthGrid()` computes internally (which can extend a few days into the previous/next month). This is why Sept 2, shown as a spillover day in August's grid, renders the day cell but never gets its event — the fetch window never included it.
+- Architect should decide the cleanest way to keep the "grid range" computation in sync between `MonthView.getMonthGrid()` (used for rendering) and `CalendarPage.loadForCurrentView()` (used for fetching) rather than fixing the symptom by widening the fetch window with a magic-number pad.

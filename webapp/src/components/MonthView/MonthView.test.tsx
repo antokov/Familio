@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MonthView } from './MonthView'
+import { MonthView, getMonthGridRange } from './MonthView'
 import type { CalendarEvent } from '../../types/event'
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
@@ -30,6 +30,14 @@ function renderMonthView(events: CalendarEvent[]) {
     />
   )
   return { onDayClick, onEventClick }
+}
+
+function findCellByDay(container: HTMLElement, day: string, otherMonth: boolean): HTMLElement {
+  const selector = otherMonth ? '.cellOtherMonth' : '.cell:not(.cellOtherMonth)'
+  const cells = Array.from(container.querySelectorAll(selector)) as HTMLElement[]
+  const match = cells.find(c => c.querySelector('.dayNumber')?.textContent === day)
+  if (!match) throw new Error(`Zelle für Tag ${day} (otherMonth=${otherMonth}) nicht gefunden`)
+  return match
 }
 
 describe('MonthView — Eintägige Termine (Regression)', () => {
@@ -81,5 +89,86 @@ describe('MonthView — Mehrtägige ganztägige Termine', () => {
     // Tag 6: nur der mehrtägige Termin -> kein "weitere"-Label
     expect(screen.getAllByText(/weitere/)).toHaveLength(1)
     expect(screen.getByText('+1 weitere')).toBeInTheDocument()
+  })
+})
+
+describe('MonthView — getMonthGridRange', () => {
+  it('inkludiert die Vor-/Nachlauftage aus dem Nachbarmonat für August 2026', () => {
+    const { start, end } = getMonthGridRange(2026, 7)
+    expect([start.getFullYear(), start.getMonth(), start.getDate()]).toEqual([2026, 6, 27])
+    expect([end.getFullYear(), end.getMonth(), end.getDate()]).toEqual([2026, 8, 6])
+  })
+
+  it('beginnt immer auf einem Montag und endet immer auf einem Sonntag', () => {
+    const { start, end } = getMonthGridRange(2027, 1)
+    expect(start.getDay()).toBe(1)
+    expect(end.getDay()).toBe(0)
+  })
+})
+
+describe('MonthView — Monatsgrenze: Klick-Navigation', () => {
+  it('ruft onDayClick mit isCurrentMonth=true für einen Tag im gerahmten Monat auf', async () => {
+    const user = userEvent.setup()
+    const onDayClick = vi.fn()
+    const { container } = render(
+      <MonthView year={2026} month={7} events={[]} today="2026-08-01" onDayClick={onDayClick} onEventClick={vi.fn()} />
+    )
+    await user.click(findCellByDay(container, '5', false))
+    expect(onDayClick).toHaveBeenCalledWith('2026-08-05', true)
+  })
+
+  it('ruft onDayClick mit isCurrentMonth=false für einen Spillover-Tag aus dem Folgemonat auf', async () => {
+    const user = userEvent.setup()
+    const onDayClick = vi.fn()
+    const { container } = render(
+      <MonthView year={2026} month={7} events={[]} today="2026-08-01" onDayClick={onDayClick} onEventClick={vi.fn()} />
+    )
+    await user.click(findCellByDay(container, '2', true))
+    expect(onDayClick).toHaveBeenCalledWith('2026-09-02', false)
+  })
+
+  it('ruft onDayClick mit isCurrentMonth=false für einen Spillover-Tag aus dem Vormonat auf', async () => {
+    const user = userEvent.setup()
+    const onDayClick = vi.fn()
+    const { container } = render(
+      <MonthView year={2026} month={7} events={[]} today="2026-08-01" onDayClick={onDayClick} onEventClick={vi.fn()} />
+    )
+    await user.click(findCellByDay(container, '27', true))
+    expect(onDayClick).toHaveBeenCalledWith('2026-07-27', false)
+  })
+
+  it('liefert für einen Nachlauftag über den Jahreswechsel (Dezember→Januar) das korrekte Folgejahr im dateStr', async () => {
+    const user = userEvent.setup()
+    const onDayClick = vi.fn()
+    const { container } = render(
+      <MonthView year={2026} month={11} events={[]} today="2026-12-01" onDayClick={onDayClick} onEventClick={vi.fn()} />
+    )
+    await user.click(findCellByDay(container, '3', true))
+    expect(onDayClick).toHaveBeenCalledWith('2027-01-03', false)
+  })
+
+  it('liefert für einen Vorlauftag über den Jahreswechsel (Januar→Dezember) das korrekte Vorjahr im dateStr', async () => {
+    const user = userEvent.setup()
+    const onDayClick = vi.fn()
+    const { container } = render(
+      <MonthView year={2027} month={0} events={[]} today="2027-01-01" onDayClick={onDayClick} onEventClick={vi.fn()} />
+    )
+    await user.click(findCellByDay(container, '28', true))
+    expect(onDayClick).toHaveBeenCalledWith('2026-12-28', false)
+  })
+})
+
+describe('MonthView — Termine an Spillover-Tagen', () => {
+  it('zeigt einen Termin am 2. September auch als Nachlauftag in der August-Ansicht', () => {
+    const ev = makeEvent({
+      title: 'Zahnarzt',
+      allDay: false,
+      startDt: '2026-09-02T10:00:00',
+      endDt: '2026-09-02T11:00:00',
+    })
+    render(
+      <MonthView year={2026} month={7} events={[ev]} today="2026-08-01" onDayClick={vi.fn()} onEventClick={vi.fn()} />
+    )
+    expect(screen.getByText('Zahnarzt')).toBeInTheDocument()
   })
 })
