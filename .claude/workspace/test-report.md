@@ -1,4 +1,4 @@
-# QA Test Report — Month View: Boundary, Navigation, Spillover Events
+# QA Test Report — FamilyMemberFormModal Unit Tests (TD-06)
 
 ## Verdict: **PASS** ✅
 
@@ -6,28 +6,30 @@
 
 | AC | Description | Result |
 |----|--------------|--------|
-| AC1 | Spillover cells (trailing July / leading September in an August grid) are visibly de-emphasized as whole cells, not just the day number | **PASS** — `.cellOtherMonth` now sets `background-color: var(--color-bg)` on the whole cell and `opacity: 0.55` on its pills, in addition to the pre-existing muted day-number color. Verified by reading the final CSS and confirming it matches `design-decision.md`'s token mapping exactly. |
-| AC2 | Clicking a greyed spillover day (e.g. a July day while viewing August) navigates to that month with the day visible, and does NOT open the create-event modal | **PASS** — `MonthView.test.tsx`: "ruft onDayClick mit isCurrentMonth=false …" (both next-month and previous-month cases) confirm `onDayClick` fires with `isCurrentMonth: false` and the correct target `dateStr`. `CalendarPage.tsx`'s `handleDayClick` routes `isCurrentMonth === false` straight to `setSelectedDate`, never calling `openNewModal` — read and confirmed directly in the diff. |
-| AC3 | Clicking a normal current-month day is unchanged (opens create-event modal) | **PASS** — `MonthView.test.tsx`: "ruft onDayClick mit isCurrentMonth=true …" confirms the flag; `CalendarPage.tsx`'s `handleDayClick` calls `openNewModal(dateStr)` unchanged when `isCurrentMonth` is true. |
-| AC4 | An event on Sept 2 is visible when Sept 2 renders as a spillover day in August's grid | **PASS** — `MonthView.test.tsx`: "zeigt einen Termin am 2. September auch als Nachlauftag …" renders the event and asserts it's present. Root cause (fetch window not covering spillover days) is fixed in `CalendarPage.tsx` by sourcing the month-view fetch range from `getMonthGridRange()` instead of `[1st, last day]`. |
-| AC5 | Week view is unaffected | **PASS** — confirmed no changes to `WeekView.tsx` or the `view === 'week'` branch of `loadForCurrentView()` in the diff; full `webapp` test suite (which includes `WeekView.test.tsx`, 17 tests) still passes unmodified. |
+| AC1 | Create mode: empty fields, first swatch default, correct title/button label, disabled button, auto-focus | **PASS** — 5 tests cover each sub-clause independently. |
+| AC2 | Edit mode: pre-filled from `editMember` (incl. non-default color), correct title/button label, enabled button | **PASS** — pre-fill test deliberately uses a non-index-0 color (`#4CAF82`), which would have caught a "always resets to swatch 0" bug that a same-as-default color choice would have masked. |
+| AC3 | Live initials uppercase/truncate; swatch click updates active state + preview | **PASS, with one fix applied during this review** — see below. |
+| AC4 | Submit payload correctness, success closes modal, error string displays inline and keeps modal open, in-flight state shows "Speichern…"/disabled, double-submit blocked | **PASS** — all 6 sub-clauses individually tested. |
+| AC5 | Empty/whitespace name or initials blocks submission at both the UI layer (disabled button) and the `handleSubmit` guard itself (raw form-submit event) | **PASS** — the raw-`fireEvent.submit()` test specifically proves the *component's own* guard works independently of the disabled button, exactly matching `analysis.md`'s "defense in depth" framing. |
+
+## Fix Applied During This Review
+The original swatch-selection test (`"markiert die angeklickte Farbe als aktiv und aktualisiert die Vorschau"`) asserted `newSwatch.toHaveStyle({ backgroundColor: '#F0805B' })` — but every swatch button always renders its own fixed color via `style={{ backgroundColor: c }}` regardless of whether it's selected (that's just how the swatch grid is built, one static-colored button per `COLOR_OPTIONS` entry). That assertion would pass identically whether or not the click actually updated the component's `color` state — it wasn't proving what the test's own name claimed ("...aktualisiert die Vorschau" / "...updates the preview"). Replaced it with an assertion on the actual live preview (`AvatarBadge`'s rendered `background-color`, queried via its `'?'` placeholder text since no initials are typed in that test), which only changes if `color` state genuinely updated — this is the real signal AC3 asks for. Re-ran the full file after the fix: still 23/23 passing, and the new assertion would have failed had the underlying state wiring been broken (verified by temporarily reasoning through what the assertion checks, not just that it passes — a tautological assertion passes regardless of correctness, which is exactly the class of bug being guarded against here).
 
 ## Edge Cases (from analysis.md)
 
-1. **Multi-day event spanning framed + spillover days** — Not directly re-tested here, but covered transitively: `eventDateKeys()` (unchanged) already expands multi-day all-day events across every date key they touch, and the wider fetch window now supplies spillover-day event data too. Existing `MonthView.test.tsx` "Mehrtägige ganztägige Termine" suite (3-day event rendering) plus the new spillover-event test together give reasonable confidence; no seam-specific bug found on inspection.
-2. **Spillover day that is also "today"** (e.g. viewing September while today is the trailing Aug 31 spillover day) — **Pre-existing minor contrast issue found, not a regression**: `.cellOtherMonth .dayNumber { color: var(--color-text-muted) }` (specificity 0,2,0) beats `.today { color: #fff }` (specificity 0,1,0), so a today-badge on a spillover day would render muted text on the primary-green circle instead of white text. This rule existed before this story (unchanged by this diff) and isn't required by any AC — flagging as tech debt for Phase 6, not a blocker.
-3. **Fetch window recomputed per navigation** — `useCallback` dependency array (`[view, selectedDate, fetchEvents]`) is unchanged; `getMonthGridRange` is called fresh from the current `selectedDate` on every invocation, no staleness risk introduced.
-4. **Month needing zero/near-zero spillover** — Covered generically by the new "beginnt immer auf einem Montag und endet immer auf einem Sonntag" invariant test (Feb 2027) rather than hunting for an exact zero-spillover month; the shared math guarantees a well-formed range regardless.
-5. **Year-boundary spillover navigation** — **Explicitly added test coverage** (was a gap in Dev's initial test pass): confirmed Dec 2026 framed → clicking the Jan 3, 2027 spillover cell yields `onDayClick('2027-01-03', false)`, and Jan 2027 framed → clicking the Dec 28, 2026 spillover cell yields `onDayClick('2026-12-28', false)`. Both pass.
-6. **`+N weitere` overflow on a spillover day** — No dedicated new test, but logic path is unchanged (`eventsByDay` mapping + slice(0,3) is identical for both cell types); existing overflow test (`MonthView — Mehrtägige ganztägige Termine`) already exercises the mechanism generally. Low risk, not blocking.
-7. **Week view unaffected** — Confirmed (see AC5).
+1. Typing initials >2 chars / lowercase → live-truncated/uppercased — **tested** (input `.value` asserted directly, not just submitted payload).
+2. Whitespace-only name/initials → button stays disabled — **tested**.
+3. Edit mode pre-fills a non-default color — **tested** (see AC2 above).
+4. `onSave` resolves with the real 409 error string → displayed inline, modal stays open — **tested** with the actual production string from `useFamilyMembers.addMember`.
+5. Double-submit while `onSave` is pending → blocked — **tested** via the deferred-promise pattern, consistent with TD-10/EventFormModal's established technique.
+6. Backdrop click closes; click inside modal content does not → **both tested** (not just the positive case).
+7. `onSave` rejecting is not a realistic scenario → **correctly not tested**, and I independently re-verified this by reading `useFamilyMembers.ts` myself rather than trusting the claim: both `addMember` and `editMember` wrap their entire bodies in `try/catch` and unconditionally `return` a `string | null`, no `throw` reachable from a resolved/rejected promise perspective. Confirmed sound.
 
-## New Tests Added (this phase)
-- 2 year-boundary click-routing tests in `MonthView.test.tsx` (Dec→Jan and Jan→Dec), closing the gap identified in edge case #5 above. Combined with Dev's 9 new tests, `MonthView.test.tsx` now has 13 tests (was 7).
+## New Tests Added / Modified (this phase)
+- 0 new tests, 1 existing test's assertion corrected (see "Fix Applied" above) — this counts as a real QA catch: the original assertion was passing but not actually testing the behavior its own description claimed to test.
 
 ## Coverage Gaps (non-blocking, noted for backlog)
-- `CalendarPage.tsx` has no dedicated test file (pre-existing, tracked as FS-16) — the new fetch-range and click-routing logic is verified indirectly through `MonthView.test.tsx`'s coverage of the shared `getMonthGridRange` helper and the `onDayClick(dateStr, isCurrentMonth)` contract, not through a `CalendarPage`-level render test. Per `arch-decision.md`, building that harness was explicitly out of scope for this story.
-- The today+spillover contrast issue (edge case #2) has no regression test since it's a pre-existing, non-regressed condition outside this story's scope.
+None identified beyond what `story.md`'s Out of Scope already excludes (`SettingsPage.tsx`-level integration, `AvatarBadge`'s own internals).
 
 ## Full Suite Result
-`npx vitest run` (whole `webapp/` project): **225/225 tests passed**, 19 test files (up from 223/19 pre-QA-phase, reflecting the 2 new tests added in this phase). `npx tsc --noEmit`: clean.
+`npx vitest run` (whole `webapp/` project): **285/285 tests passed**, 22 test files (up from 262/21 before this story — 23 new tests, 1 new file). `npx tsc --noEmit`: clean. No `act()` warnings or unhandled errors in the final run.
