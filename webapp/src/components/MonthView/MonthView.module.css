@@ -31,15 +31,11 @@
 }
 
 .cellOtherMonth {
-  background-color: var(--color-bg);
+  opacity: 0.45;
 }
 
 .cellOtherMonth .dayNumber {
   color: var(--color-text-muted);
-}
-
-.cellOtherMonth .pill {
-  opacity: 0.55;
 }
 
 .dayNumber {
