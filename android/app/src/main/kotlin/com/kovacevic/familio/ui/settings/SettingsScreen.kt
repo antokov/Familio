@@ -132,6 +132,17 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
         }
 
         item {
+            SettingsSection(title = "Benachrichtigungen") {
+                Text(
+                    "Täglich um 21:00 Uhr eine Erinnerung an morgige Termine erhalten: " +
+                        "die ntfy-App installieren (F-Droid/Play Store) und dort ein Thema " +
+                        "auf dem oben eingestellten Familio-Server abonnieren.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
+
+        item {
             SettingsSection(
                 title = "Familie",
                 trailing = {

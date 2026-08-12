@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 20
     anthropic_api_key: str | None = None
     anthropic_model: str = "claude-sonnet-5"
+    ntfy_url: str | None = None
+    ntfy_topic: str = "familio-events"
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 

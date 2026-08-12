@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,7 +36,10 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen() {
+fun MainScreen(
+    pendingDeepLinkRoute: String? = null,
+    onDeepLinkConsumed: () -> Unit = {},
+) {
     val pagerState = rememberPagerState(pageCount = { BOTTOM_NAV_DESTINATIONS.size })
     val scope = rememberCoroutineScope()
     var showSettings by rememberSaveable { mutableStateOf(false) }
@@ -48,13 +52,20 @@ fun MainScreen() {
         BOTTOM_NAV_DESTINATIONS[pagerState.currentPage].label
     }
 
-    CompositionLocalProvider(
-        LocalTabNavigator provides { route ->
-            showSettings = false
-            val index = BOTTOM_NAV_DESTINATIONS.indexOfFirst { it.route == route }
-            if (index >= 0) scope.launch { pagerState.animateScrollToPage(index) }
-        },
-    ) {
+    val navigateToTab: (String) -> Unit = { route ->
+        showSettings = false
+        val index = BOTTOM_NAV_DESTINATIONS.indexOfFirst { it.route == route }
+        if (index >= 0) scope.launch { pagerState.animateScrollToPage(index) }
+    }
+
+    LaunchedEffect(pendingDeepLinkRoute) {
+        if (pendingDeepLinkRoute != null) {
+            navigateToTab(pendingDeepLinkRoute)
+            onDeepLinkConsumed()
+        }
+    }
+
+    CompositionLocalProvider(LocalTabNavigator provides navigateToTab) {
         Scaffold(
             topBar = {
                 TopAppBar(

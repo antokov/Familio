@@ -3,29 +3,30 @@
 **Type:** Business Feature
 
 ## Story
-As a family member browsing the Documents page,
-I want documents grouped by the family member they're assigned to (with an "Allgemein" group for unassigned documents),
-so that I can quickly find documents relevant to a specific person instead of scanning one long flat list.
+As a family member using the Familio Android app,
+I want to receive a push notification every day at 21:00 listing tomorrow's calendar events (if any),
+so that I don't have to open the app to remember what's coming up the next day.
 
 ## Acceptance Criteria
 
-**AC1:** Given documents exist that are assigned to different family members, when I open the Documents page, then documents are displayed under section headers — one section per family member that has at least one document, plus an "Allgemein" section for documents with no assigned family member.
+**AC1:** Given I have at least one calendar event scheduled for tomorrow, when it becomes 21:00 today, then I receive a push notification on my Android device listing the event(s) happening tomorrow (title + time, or "ganztägig" for all-day events).
 
-**AC2:** Given a document has no assigned family member, when I view the Documents page, then it appears under the "Allgemein" section (not hidden, not under a family member section).
+**AC2:** Given I have no calendar events scheduled for tomorrow, when it becomes 21:00 today, then I do NOT receive a push notification (no empty/noise notification).
 
-**AC3:** Given all documents are assigned to family members (none unassigned), when I view the Documents page, then no empty "Allgemein" section is shown.
+**AC3:** Given I receive the 21:00 notification, when I tap it, then the app opens to the calendar view (so I can see the full details of tomorrow's events).
 
-**AC4:** Given I reassign a document to a different family member (or unassign it) via the existing assignment dropdown, when the reassignment succeeds, then the document immediately moves from its old group to its new group without a page reload.
+**AC4:** Given multiple family members share the calendar, when the 21:00 notification is sent, then each family member's device that has the app installed and notifications enabled receives it — not just the person who created the events.
 
-**AC5:** Given no documents exist at all, when I open the Documents page, then the existing "Keine Dokumente" empty state is shown as today (no group headers rendered for zero documents).
+**AC5:** Given I have not granted the app notification permission (or have disabled notifications in device/app settings), when 21:00 arrives, then no notification is delivered to my device and no error is shown elsewhere in the app (silent no-op for that device).
 
 ## Out of Scope
-- Changing sort order *within* a group (documents within a group keep whatever order the API already returns them in, e.g. newest-first — unchanged)
-- Collapsible/expandable group sections (all groups always render fully expanded)
-- Changing the per-document assignment `<select>` dropdown's own wording (e.g. its "Nicht zugewiesen" option) — that control is unaffected, only the page-level grouping/section-header layer is new
-- Persisting a user's preferred group order across sessions (a fixed, deterministic order is fine — see BA for the exact ordering rule)
-- Android app (this already has grouping — see "Group Android documents by family member" — this story brings the webapp to parity with it, no further Android work)
+- Push notifications in the WebApp (browser/PWA Web Push) — Android-only in this iteration; a webapp follow-up story can reuse the backend piece if one is introduced
+- User-configurable notification time (e.g. changing "21:00" to a different hour) — the time is fixed for this iteration
+- Per-event or per-category notification preferences (e.g. muting certain calendar entries) — it's all-or-nothing based on the device's notification permission
+- Notifications for anything other than "tomorrow's events" (e.g. reminders X minutes before an event, weekly digests, task/shopping-list notifications)
+- Retrying/guaranteeing delivery if the device is offline at 21:00 — best-effort push delivery only
 
 ## Notes
-- This is a webapp parity story: the Android app already groups documents by assigned family member with an "Allgemein" group for unassigned ones (see the "Group Android documents by family member and add camera-scan upload" change) — the webapp should adopt the same grouping concept and the same "Allgemein" label for the unassigned group.
-- The webapp currently renders `documents` as one flat `<ul>` via `DocumentItem` in `DocumentsPage.tsx` — this is a purely additive grouping layer on top of that, no `DocumentItem` behavior changes expected.
+- No existing push-notification infrastructure was found in the codebase (no FCM/Firebase references, no notification scheduling on the backend). This story likely requires introducing that infrastructure end-to-end (device token registration, a backend-side daily trigger at 21:00, and the Android push receiver) — Architect should confirm the concrete approach (e.g. Firebase Cloud Messaging vs. an alternative) and flag if this needs to be split into an Enabler story for the underlying push infrastructure plus a smaller Business Feature story for the "tomorrow's events" content/logic on top of it.
+- "Tomorrow" should be evaluated based on the family's/server's local timezone, consistent with how the rest of the calendar already treats event times as naive wall-clock time (see `CLAUDE.md` "Timezone-Fix" note) — Architect/BA to confirm the exact boundary given the app is self-hosted on a single NAS (no per-user timezone concept currently exists).
+- All-day events (`all_day: true`, including multi-day ones spanning into/through tomorrow) should count as "an event tomorrow" for AC1 — exact wording/format of the notification body is a Dev/Design decision, not prescribed here.

@@ -1,45 +1,46 @@
-# Design Decision — Dokumente nach zugewiesener Person gruppieren
+# Design Decision — Dokumentnamen anpassen
 
 ## Scope
-`DocumentsPage.tsx` / `DocumentsPage.module.css` (render structure: one header + one `<ul>` per group instead of one flat `<ul>`) and a new `DocumentGroupHeader` component. `DocumentItem` itself is visually untouched.
+`DocumentItem.tsx` / `DocumentItem.module.css` only. No other component's visuals change.
 
 ## Layout
 
-Each group becomes a `<section>`-like block: a header row, then that group's `<ul>` of `DocumentItem`s (same `.list` styling as today, just repeated per group instead of once globally):
+**Resting state (unchanged):** icon badge, `.content` (title + meta stack), assignee `<select>`, `.actions` (4 icon buttons, visible on row hover).
+
+**Rename trigger:** a 5th icon button (`Pencil`, `lucide-react`) added to `.actions`, positioned *before* the existing delete button (order: extract → preview → download → rename → delete) — rename sits next to the other "do something with this document" actions, while delete stays last/rightmost as the app's established "most destructive action goes last" convention (already true of this exact row today).
+
+**Renaming state:** mirrors how delete-confirm already swaps the row, but swaps a *different* region:
+- `.content`'s title `<span>` is replaced by a `<input type="text">` (pre-filled, autofocus, same visual width as the title it replaces) — the `.meta` line (size · date) stays visible beneath it unchanged, so the row doesn't jump in height and the user keeps context of which file they're renaming.
+- `.actions` swaps (exactly like it already does for `confirmDelete`) to show only two icon buttons: `Check` (confirm) and `X` (cancel) — sized and styled identically to the existing `.actionBtn` (30×30, same hover treatment), *not* the pill-shaped `.confirmBtn`/`.cancelBtn` text buttons used for delete. Reason: the text input itself already carries the "what am I confirming" context that delete's "Löschen?" text label exists to provide — a second text label would be redundant, so compact icon buttons keep the row from growing.
+- The assignee `<select>` stays visible and interactive during rename (renaming and reassigning are unrelated actions; no reason to block one during the other).
 
 ```
-( M ) Mira
-  [ DocumentItem ]
-  [ DocumentItem ]
-
-( A ) Anton
-  [ DocumentItem ]
-
-Allgemein
-  [ DocumentItem ]
+Resting:   [📄] Title text            [Zuweisung ▾]  [extract][preview][download][rename][delete]
+Renaming:  [📄] [input: Title text__] [Zuweisung ▾]                              [✓][✗]
+           📏 size · date
 ```
-
-Groups stack with `var(--space-6)` between them (one step up from the existing `.list` internal gap of `var(--space-2)`) — enough separation to read as distinct sections without needing a divider line or background-color block, consistent with how this app generally separates content via whitespace + typography rather than boxes/borders (compare `SettingsPage`'s section spacing).
 
 ## Token Usage
 
-- **`DocumentGroupHeader` row:** `display: flex`, `align-items: center`, `gap: var(--space-2)`, `margin-bottom: var(--space-2)` (tight — the header should read as a label for the list immediately below it, not a separate block).
-- **Header label text:** `font-size: var(--font-size-sm)`, `font-weight: 700`, `color: var(--color-text-muted)` — same weight/color as this app's other muted section labels (e.g. `EventFormModal`'s `.label`), signaling "metadata about the group," not a page heading. Deliberately *not* `--font-size-lg`/`--color-text` (that scale is reserved for the page's own `<h2>` "Dokumente" heading) — the group headers must stay visually subordinate to the page title.
-- **Avatar in header:** `AvatarBadge` `size="sm"` (matches Android's `AvatarSize.SM` for this exact spot) — small enough to read as a label decoration, not a content item competing with the `DocumentItem` rows below it.
-- **Group-to-group spacing:** `var(--space-6)` on the wrapping `.group` div (`margin-bottom`, or `gap` on a parent flex column of groups) — one step above the page's existing section-level rhythm (`.page` already uses `gap: var(--space-5)` between its top-level blocks; groups-of-documents nested one level deeper get a slightly larger `--space-6` so they don't visually merge with that outer rhythm).
-- **"Allgemein" header:** identical text styling to a member header, just no `AvatarBadge` — do not substitute a placeholder/generic icon in its place (Android doesn't either); the absence of an avatar *is* the signal that this group is the unassigned one.
+- **Rename trigger button:** identical shape/tokens to existing `.actionBtn` (`width/height: 30px`, `border-radius: var(--radius-sm)`, `color: var(--color-text-muted)`, hover `background-color: var(--color-surface-alt)` + `color: var(--color-text)`) — it's one more peer in the same row, not a visually distinct action.
+- **Rename input:** `padding: var(--space-1) var(--space-2)`, `border: 1px solid var(--color-primary)` (primary, not the neutral `--color-border` other inputs use at rest — signals "you're actively editing this," matching how a focused input elsewhere in the app gets `border-color: var(--color-primary)` on `:focus`; here it's *always* that color while the field exists, since the field only exists while editing), `border-radius: var(--radius-sm)`, `background-color: var(--color-bg)`, `font-size`/`font-weight` matching `.title` exactly (`var(--font-size-sm)` / `600`) so the input doesn't visually "jump" in weight from the text it replaces.
+- **Confirm icon button (`Check`):** same `.actionBtn` base, hover tinted with success rather than neutral: `background-color: rgba(74, 158, 114, 0.12)`, `color: var(--color-success)` (parallels how the existing `.deleteBtn:hover` tints with `--color-accent` at the same `0.12` alpha — same recipe, success color instead of accent color, since confirming a rename is a positive/affirming action).
+- **Cancel icon button (`X`):** plain `.actionBtn` hover (neutral, no special tint) — cancelling isn't a destructive or special action, it's just "never mind."
+- **Rename error text:** `font-size: var(--font-size-xs)`, `color: var(--color-accent)`, positioned on its own line beneath the input (same slot the `.meta` line already occupies conceptually) — matches `.confirmText`'s color/weight-of-concern but doesn't need `.confirmText`'s bold weight since it's an error message, not a question.
 
 ## Interactions
 
-- No new interactive elements — headers are static labels, not buttons (no collapse/expand per story.md Out of Scope).
-- Existing `DocumentItem` interactions (reassign dropdown, preview, download, delete, extract) are completely unchanged; reassigning a document simply causes it to re-render under a different header on the next render pass (no transition/animation needed — instant re-grouping is fine and matches how every other list-mutation in this app already behaves, e.g. deleting a task).
+- Clicking the rename trigger: focuses the input immediately (autofocus + select-all-text, so a full replace is one keystroke away — same "get out of the way" affordance most rename-in-place UIs have).
+- `Enter` in the input confirms (same effect as clicking `Check`); `Escape` cancels (same effect as clicking `X`) — both are expected, low-cost affordances for a single-line rename field and don't need to be discoverable via a label, they're a universal convention.
+- `Check`/input disabled while a rename request is in flight (`renameSaving`), identical guard shape to the calendar-event-delete feature's `deleting` state.
+- Entering rename mode while this row's delete-confirm is showing instantly swaps back to the resting actions row first (per BA edge case 4) — no animation needed, instant state swap, consistent with how this row already has zero transition on the delete-confirm swap today.
 
 ## Signature Element
 
-The **small avatar inline with the group label** is the one deliberate visual touch — it lets you recognize "whose documents these are" at a glance from the avatar's color alone, before even reading the name, extending the same avatar-as-identity language already used throughout the app (Sidebar, EventFormModal attendees, TaskItem assignee) into a new context: a section label rather than an item decoration.
+Nothing new — this deliberately reuses the row's own established "swap part of the row for an inline edit/confirm state" language (already the delete-confirm's signature interaction) rather than inventing a second visual idiom for a very similar kind of action. The one distinguishing touch is the primary-colored input border, which is this app's existing "you're editing" signal borrowed from focus states elsewhere, applied here as a resting (not just `:focus`) style since the field's whole existence *is* the edit state.
 
 ## Avoid
-- Do not give group headers a background/box/border — this app uses whitespace and type-weight for hierarchy, not container chrome, for this kind of grouping (contrast with `DocumentItem`'s own card treatment, which stays as-is).
-- Do not use `AvatarBadge size="md"` or `"lg"` in the header — reserve those sizes for contexts where the avatar is the primary content (attendee pickers), not a label decoration.
-- Do not add a document count badge/number next to each group header — not requested, adds visual noise for a feature about *finding* documents by person, not counting them.
-- Do not reorder or restyle `DocumentItem` itself.
+- Do not use the pill-shaped `.confirmBtn`/`.cancelBtn` (text "Ja"/"Nein") for rename confirm/cancel — those are delete's specific visual language; rename gets compact icon buttons instead (see Layout).
+- Do not hide the `.meta` line or the assignee `<select>` while renaming — only the title itself becomes editable.
+- Do not add a placeholder like "Dateiname eingeben…" — the field is always pre-filled with the current name, never empty at the start, so a placeholder would never be seen.
+- Do not grow the row's height during rename — the input must fit the same vertical slot the title `<span>` already occupies.
