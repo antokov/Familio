@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
@@ -52,7 +51,6 @@ fun QuickAddBar(onAdd: (ShoppingItemWriteRequest) -> Unit) {
     }
 
     Surface(
-        modifier = Modifier.imePadding(),
         tonalElevation = 3.dp,
         shadowElevation = 8.dp,
     ) {

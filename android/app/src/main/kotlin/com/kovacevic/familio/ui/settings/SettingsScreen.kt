@@ -133,12 +133,16 @@ fun SettingsScreen(modifier: Modifier = Modifier) {
 
         item {
             SettingsSection(title = "Benachrichtigungen") {
-                Text(
-                    "Täglich um 21:00 Uhr eine Erinnerung an morgige Termine erhalten: " +
-                        "die ntfy-App installieren (F-Droid/Play Store) und dort ein Thema " +
-                        "auf dem oben eingestellten Familio-Server abonnieren.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Täglich um ca. 21:00 Uhr eine lokale Benachrichtigung mit den morgigen " +
+                            "Terminen (Uhrzeit nicht exakt, abhängig von Android-Akku-Optimierung). " +
+                            "Läuft direkt auf dem Gerät, kein separater Server nötig.",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    // TEST-ONLY, siehe TestNotificationButton.kt - kann gefahrlos entfernt werden.
+                    TestNotificationButton()
+                }
             }
         }
 

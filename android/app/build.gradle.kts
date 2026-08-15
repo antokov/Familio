@@ -86,4 +86,6 @@ dependencies {
     implementation(libs.coil.network.okhttp)
 
     implementation(libs.play.services.mlkit.document.scanner)
+
+    implementation(libs.androidx.work.runtime.ktx)
 }
